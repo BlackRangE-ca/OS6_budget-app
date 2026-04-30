@@ -1,1 +1,0 @@
-# OpenSW6_team15_proj
