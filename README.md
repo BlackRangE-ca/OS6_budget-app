@@ -65,12 +65,10 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=팀장에게 문의
 ## 실행 방법
 
 ```bash
-npx expo start --tunnel
+npx expo start
 ```
 
 터미널에 QR코드가 뜨면 **Expo Go 앱**으로 스캔하면 됩니다.
-
-> 같은 와이파이가 아닌 경우 `--tunnel` 옵션을 사용하세요.
 
 ---
 
