@@ -1,6 +1,17 @@
+export type ExpenseCategory =
+  | "식비"
+  | "교통"
+  | "주거"
+  | "통신"
+  | "의료"
+  | "문화"
+  | "쇼핑"
+  | "저축"
+  | "기타";
+
 export type Expense = {
   id?: string;
-  category: string;
+  category: ExpenseCategory;
   amount: number;
   date?: string;
 };
@@ -32,11 +43,20 @@ export function analyzeConsumptionType(
     };
   }
 
-  const categoryMap: Record<string, number> = {};
+  const categoryMap: Record<ExpenseCategory, number> = {
+    식비: 0,
+    교통: 0,
+    주거: 0,
+    통신: 0,
+    의료: 0,
+    문화: 0,
+    쇼핑: 0,
+    저축: 0,
+    기타: 0,
+  };
 
   expenses.forEach((item) => {
-    categoryMap[item.category] =
-      (categoryMap[item.category] || 0) + item.amount;
+    categoryMap[item.category] += item.amount;
   });
 
   const sortedCategories = Object.entries(categoryMap).sort(
@@ -46,38 +66,61 @@ export function analyzeConsumptionType(
   const [topCategory, topCategoryAmount] = sortedCategories[0];
   const topCategoryRatio = topCategoryAmount / totalAmount;
 
+  const foodRatio = categoryMap["식비"] / totalAmount;
+  const transportRatio = categoryMap["교통"] / totalAmount;
+  const housingRatio = categoryMap["주거"] / totalAmount;
+  const telecomRatio = categoryMap["통신"] / totalAmount;
+  const medicalRatio = categoryMap["의료"] / totalAmount;
+  const cultureRatio = categoryMap["문화"] / totalAmount;
+  const shoppingRatio = categoryMap["쇼핑"] / totalAmount;
+  const savingRatio = categoryMap["저축"] / totalAmount;
+  const etcRatio = categoryMap["기타"] / totalAmount;
+
   let type = "균형 소비형";
-  let description = "특정 카테고리에 소비가 크게 치우치지 않았습니다.";
+  let description = "특정 카테고리에 소비가 크게 치우치지 않은 안정적인 소비 패턴입니다.";
   let advice = "현재 소비 패턴을 유지하되, 목표 저축액을 먼저 설정해보세요.";
 
-  if (topCategoryRatio >= 0.5) {
+  if (savingRatio >= 0.3) {
+    type = "저축 중심형";
+    description = "전체 지출 중 저축 비중이 높아 미래 대비 성향이 강합니다.";
+    advice = "저축을 유지하되, 생활비가 지나치게 부족하지 않은지 함께 점검해보세요.";
+  } else if (housingRatio >= 0.4) {
+    type = "주거비 부담형";
+    description = "주거비 비중이 높아 다른 소비 여력이 줄어들 수 있습니다.";
+    advice = "월세, 관리비 등 고정 주거비를 점검하고 예산 비중을 조정해보세요.";
+  } else if (topCategoryRatio >= 0.5) {
     type = "편중 소비형";
-    description = `${topCategory} 지출 비중이 전체 소비의 절반 이상을 차지합니다.`;
+    description = `${topCategory} 지출이 전체 소비의 절반 이상을 차지합니다.`;
     advice = `${topCategory} 소비를 20%만 줄여도 월 ${Math.round(
       topCategoryAmount * 0.2
     ).toLocaleString()}원을 절약할 수 있습니다.`;
-  } else if (
-    (topCategory.includes("카페") ||
-      topCategory.includes("간식") ||
-      topCategory.includes("쇼핑")) &&
-    topCategoryRatio >= 0.3
-  ) {
-    type = "충동 소비형";
-    description = `${topCategory} 관련 소비 비중이 높은 편입니다.`;
-    advice = "소비 빈도를 줄이면 고정적인 절약 효과를 만들 수 있습니다.";
-  } else if (
-    (topCategory.includes("월세") ||
-      topCategory.includes("보험") ||
-      topCategory.includes("통신") ||
-      topCategory.includes("구독")) &&
-    topCategoryRatio >= 0.4
-  ) {
-    type = "고정지출 부담형";
-    description = "고정지출 비중이 높아 생활비 여유가 줄어들 수 있습니다.";
-    advice = "통신비, 구독료, 보험료처럼 조정 가능한 항목을 점검해보세요.";
+  } else if (shoppingRatio + cultureRatio >= 0.4) {
+    type = "여가·쇼핑 소비형";
+    description = "쇼핑과 문화 소비 비중이 높아 선택적 소비가 많은 편입니다.";
+    advice = "쇼핑과 문화생활 예산을 미리 정해두면 충동 소비를 줄일 수 있습니다.";
+  } else if (foodRatio >= 0.35) {
+    type = "식비 집중형";
+    description = "식비 비중이 높아 외식이나 배달 소비가 많을 가능성이 있습니다.";
+    advice = "외식·배달 횟수를 줄이고 주간 식비 한도를 설정해보세요.";
+  } else if (telecomRatio >= 0.2) {
+    type = "통신비 부담형";
+    description = "통신비 비중이 상대적으로 높은 편입니다.";
+    advice = "요금제, 구독 서비스, 부가서비스를 점검해 고정비를 줄여보세요.";
+  } else if (medicalRatio >= 0.25) {
+    type = "건강관리 지출형";
+    description = "의료 관련 지출 비중이 높은 소비 패턴입니다.";
+    advice = "반복적으로 발생하는 의료비가 있다면 월별 예산에 따로 반영해보세요.";
+  } else if (transportRatio >= 0.25) {
+    type = "이동비 부담형";
+    description = "교통비 비중이 높아 이동 관련 지출이 많은 편입니다.";
+    advice = "대중교통 정기권, 이동 경로 조정 등으로 교통비를 관리해보세요.";
+  } else if (etcRatio >= 0.3) {
+    type = "기타지출 관리필요형";
+    description = "기타 항목 비중이 높아 소비 내역이 명확히 분류되지 않고 있습니다.";
+    advice = "기타 지출을 더 구체적인 카테고리로 나누면 소비 분석 정확도가 올라갑니다.";
   } else if (totalAmount >= 1000000) {
     type = "과소비 위험형";
-    description = "월 소비 금액이 높은 편입니다.";
+    description = "총 소비 금액이 높은 편입니다.";
     advice = "카테고리별 한도를 설정하고 주간 단위로 소비를 점검하는 것이 좋습니다.";
   }
 

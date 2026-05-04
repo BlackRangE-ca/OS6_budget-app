@@ -3,7 +3,7 @@ import { analyzeConsumptionType, Expense } from "../../lib/analyzeConsumption";
 
 const sampleExpenses: Expense[] = [
   { category: "식비", amount: 300000 },
-  { category: "카페", amount: 150000 },
+  { category: "문화", amount: 150000 },
   { category: "쇼핑", amount: 200000 },
   { category: "교통", amount: 80000 },
 ];
