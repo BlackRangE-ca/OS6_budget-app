@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react'
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { supabase } from '../../lib/supabase'
 import { Transaction } from '../../types'
 
 export default function DashboardScreen() {
+  const navigation = useNavigation() as any
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [totalAmount, setTotalAmount] = useState(0)
   const [budget, setBudget] = useState<number | null>(null)
@@ -46,6 +47,25 @@ export default function DashboardScreen() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
+  }
+
+  async function handleDelete(id: string) {
+    Alert.alert('삭제', '이 지출을 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제', style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase.from('transactions').delete().eq('id', id)
+          if (error) {
+            Alert.alert('오류', '삭제에 실패했습니다.')
+          } else {
+            const updated = transactions.filter(t => t.id !== id)
+            setTransactions(updated)
+            setTotalAmount(updated.reduce((sum, t) => sum + t.amount, 0))
+          }
+        },
+      },
+    ])
   }
 
   const CATEGORY_EMOJI: Record<string, string> = {
@@ -102,7 +122,17 @@ export default function DashboardScreen() {
                   {item.memo ? <Text style={styles.memo}>{item.memo}</Text> : null}
                 </View>
               </View>
-              <Text style={styles.amount}>-{item.amount.toLocaleString()}원</Text>
+              <View style={styles.itemRight}>
+                <Text style={styles.amount}>-{item.amount.toLocaleString()}원</Text>
+                <View style={styles.btnRow}>
+                  <TouchableOpacity onPress={() => navigation.navigate('Edit', { transaction: item })} style={styles.editBtn}>
+                    <Text style={styles.editText}>수정</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.deleteBtn}>
+                    <Text style={styles.deleteText}>삭제</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           )}
           contentContainerStyle={{ paddingBottom: 40 }}
@@ -133,4 +163,10 @@ const styles = StyleSheet.create({
   progressBar: { height: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, marginTop: 8, overflow: 'hidden' },
   progressFill: { height: 8, borderRadius: 4 },
   progressText: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
+  itemRight: { alignItems: 'flex-end', gap: 6 },
+  btnRow: { flexDirection: 'row', gap: 6 },
+  editBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#ede9fe' },
+  editText: { fontSize: 12, color: '#4f46e5', fontWeight: '600' },
+  deleteBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#fee2e2' },
+  deleteText: { fontSize: 12, color: '#e53e3e', fontWeight: '600' },
 })
