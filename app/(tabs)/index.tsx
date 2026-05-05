@@ -7,32 +7,42 @@ import { Transaction } from '../../types'
 export default function DashboardScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [totalAmount, setTotalAmount] = useState(0)
+  const [budget, setBudget] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   useFocusEffect(
     useCallback(() => {
-      fetchTransactions()
+      fetchData()
     }, [])
   )
 
-  async function fetchTransactions() {
+  async function fetchData() {
     const { data: { user } } = await supabase.auth.getUser()
     const thisMonth = new Date().toISOString().slice(0, 7)
 
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('user_id', user!.id)
-      .gte('date', `${thisMonth}-01`)
-      .lte('date', `${thisMonth}-31`)
-      .order('date', { ascending: false })
+    const [{ data: txData, error }, { data: budgetData }] = await Promise.all([
+      supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user!.id)
+        .gte('date', `${thisMonth}-01`)
+        .lte('date', `${thisMonth}-31`)
+        .order('date', { ascending: false }),
+      supabase
+        .from('budgets')
+        .select('amount')
+        .eq('user_id', user!.id)
+        .eq('month', thisMonth)
+        .single(),
+    ])
 
-    if (!error && data) {
-      setTransactions(data)
-      setTotalAmount(data.reduce((sum, t) => sum + t.amount, 0))
+    if (!error && txData) {
+      setTransactions(txData)
+      setTotalAmount(txData.reduce((sum, t) => sum + t.amount, 0))
     }
+    setBudget(budgetData?.amount ?? null)
     setLoading(false)
-  }
+}
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -55,6 +65,21 @@ export default function DashboardScreen() {
       <View style={styles.summaryCard}>
         <Text style={styles.summaryLabel}>총 지출</Text>
         <Text style={styles.summaryAmount}>{totalAmount.toLocaleString()}원</Text>
+        {budget && (
+          <>
+            <View style={styles.budgetRow}>
+              <Text style={styles.budgetLabel}>예산 {budget.toLocaleString()}원</Text>
+              <Text style={styles.budgetLabel}>남은 금액 {Math.max(0, budget - totalAmount).toLocaleString()}원</Text>
+            </View>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, {
+                width: `${Math.min(100, Math.round(totalAmount / budget * 100))}%` as any,
+                backgroundColor: totalAmount > budget ? '#ff6b6b' : '#a5b4fc',
+              }]} />
+            </View>
+            <Text style={styles.progressText}>{Math.min(100, Math.round(totalAmount / budget * 100))}% 사용</Text>
+          </>
+        )}
       </View>
 
       {loading ? (
@@ -103,4 +128,9 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, color: '#aaa', marginTop: 2 },
   memo: { fontSize: 12, color: '#888', marginTop: 2 },
   amount: { fontSize: 15, fontWeight: '600', color: '#e53e3e' },
+  budgetRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
+  budgetLabel: { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
+  progressBar: { height: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, marginTop: 8, overflow: 'hidden' },
+  progressFill: { height: 8, borderRadius: 4 },
+  progressText: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
 })
