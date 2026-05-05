@@ -1,0 +1,119 @@
+import { useState } from 'react'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native'
+import { supabase } from '../../lib/supabase'
+import { Category, TransactionType } from '../../types'
+
+const CATEGORIES: Category[] = ['식비', '교통', '주거', '통신', '의료', '문화', '쇼핑', '저축', '기타']
+
+export default function AddScreen() {
+  const [amount, setAmount] = useState('')
+  const [category, setCategory] = useState<Category>('식비')
+  const [type, setType] = useState<TransactionType>('variable')
+  const [memo, setMemo] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit() {
+    if (!amount || isNaN(Number(amount))) {
+      Alert.alert('오류', '금액을 올바르게 입력해주세요.')
+      return
+    }
+
+    setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const { error } = await supabase.from('transactions').insert({
+      user_id: user!.id,
+      amount: Number(amount),
+      category,
+      type,
+      memo,
+      date: new Date().toISOString().split('T')[0],
+    })
+
+    if (error) {
+      Alert.alert('오류', '저장에 실패했습니다.')
+    } else {
+      Alert.alert('완료', '지출이 저장됐습니다.')
+      setAmount('')
+      setMemo('')
+      setCategory('식비')
+      setType('variable')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>지출 추가</Text>
+
+      <Text style={styles.label}>금액</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="0"
+        value={amount}
+        onChangeText={setAmount}
+        keyboardType="numeric"
+      />
+
+      <Text style={styles.label}>유형</Text>
+      <View style={styles.row}>
+        <TouchableOpacity
+          style={[styles.typeButton, type === 'variable' && styles.typeActive]}
+          onPress={() => setType('variable')}
+        >
+          <Text style={[styles.typeText, type === 'variable' && styles.typeTextActive]}>변동지출</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.typeButton, type === 'fixed' && styles.typeActive]}
+          onPress={() => setType('fixed')}
+        >
+          <Text style={[styles.typeText, type === 'fixed' && styles.typeTextActive]}>고정지출</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.label}>카테고리</Text>
+      <View style={styles.categoryGrid}>
+        {CATEGORIES.map((cat) => (
+          <TouchableOpacity
+            key={cat}
+            style={[styles.categoryButton, category === cat && styles.categoryActive]}
+            onPress={() => setCategory(cat)}
+          >
+            <Text style={[styles.categoryText, category === cat && styles.categoryTextActive]}>{cat}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={styles.label}>메모 (선택)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="메모를 입력하세요"
+        value={memo}
+        onChangeText={setMemo}
+      />
+
+      <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={loading}>
+        <Text style={styles.buttonText}>{loading ? '저장 중...' : '저장하기'}</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 24, backgroundColor: '#f8f8ff' },
+  title: { fontSize: 24, fontWeight: 'bold', marginTop: 60, marginBottom: 24, color: '#1a1a2e' },
+  label: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 8, marginTop: 16 },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 14, fontSize: 16, backgroundColor: '#fff' },
+  row: { flexDirection: 'row', gap: 10 },
+  typeButton: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fff' },
+  typeActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  typeText: { color: '#555', fontWeight: '500' },
+  typeTextActive: { color: '#fff' },
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryButton: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff' },
+  categoryActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  categoryText: { color: '#555', fontSize: 13 },
+  categoryTextActive: { color: '#fff' },
+  button: { backgroundColor: '#4f46e5', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 32, marginBottom: 40 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+})
