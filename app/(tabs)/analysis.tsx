@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { analyzeConsumptionType, Expense } from "../../lib/analyzeConsumption";
+import { analyzeCategorySpending } from "../../lib/categoryAnalysis";
 
 const sampleExpenses: Expense[] = [
   { category: "식비", amount: 300000 },
@@ -10,9 +11,10 @@ const sampleExpenses: Expense[] = [
 
 export default function AnalysisScreen() {
   const result = analyzeConsumptionType(sampleExpenses);
+  const categoryResult = analyzeCategorySpending(sampleExpenses);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>소비패턴 유형분류</Text>
 
       <View style={styles.card}>
@@ -37,8 +39,20 @@ export default function AnalysisScreen() {
 
         <Text style={styles.subTitle}>절약 조언</Text>
         <Text style={styles.advice}>{result.advice}</Text>
+        <View style={styles.divider} />
+
+<Text style={styles.subTitle}>카테고리별 소비 분석</Text>
+
+{categoryResult.map((item) => (
+  <View key={item.category} style={styles.categoryRow}>
+    <Text style={styles.categoryName}>{item.category}</Text>
+    <Text style={styles.categoryAmount}>
+      {item.amount.toLocaleString()}원 / {item.ratio}%
+    </Text>
+  </View>
+))}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -89,4 +103,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E5E5",
     marginVertical: 14,
   },
+  categoryRow: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  paddingVertical: 8,
+},
+categoryName: {
+  fontSize: 15,
+  fontWeight: "600",
+  color: "#333",
+},
+categoryAmount: {
+  fontSize: 15,
+  color: "#666",
+},
 });
