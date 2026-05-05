@@ -1,19 +1,33 @@
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native'
+import { useNavigation } from '@react-navigation/native'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Category, TransactionType } from '../../types'
 
-const CATEGORIES: Category[] = ['식비', '교통', '주거', '통신', '의료', '문화', '쇼핑', '저축', '기타']
+const CATEGORIES: Category[] = ['식비', '교통', '주거', '통신', '의료', '문화', '쇼핑', '저축', '기타', '수입']
+
+function formatNumber(value: string) {
+  const num = value.replace(/[^0-9]/g, '')
+  return num ? Number(num).toLocaleString() : ''
+}
+
+function parseNumber(value: string) {
+  return value.replace(/,/g, '')
+}
 
 export default function AddScreen() {
+  const navigation = useNavigation()
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState<Category>('식비')
   const [type, setType] = useState<TransactionType>('variable')
   const [memo, setMemo] = useState('')
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit() {
-    if (!amount || isNaN(Number(amount))) {
+    const rawAmount = parseNumber(amount)
+    if (!rawAmount || isNaN(Number(rawAmount))) {
       Alert.alert('오류', '금액을 올바르게 입력해주세요.')
       return
     }
@@ -23,11 +37,11 @@ export default function AddScreen() {
 
     const { error } = await supabase.from('transactions').insert({
       user_id: user!.id,
-      amount: Number(amount),
+      amount: Number(rawAmount),
       category,
       type,
       memo,
-      date: new Date().toISOString().split('T')[0],
+      date,
     })
 
     if (error) {
@@ -44,14 +58,19 @@ export default function AddScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>지출 추가</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>지출 추가</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+          <Ionicons name="close" size={22} color="#6B7280" />
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.label}>금액</Text>
       <TextInput
         style={styles.input}
         placeholder="0"
         value={amount}
-        onChangeText={setAmount}
+        onChangeText={(v) => setAmount(formatNumber(v))}
         keyboardType="numeric"
       />
 
@@ -69,6 +88,12 @@ export default function AddScreen() {
         >
           <Text style={[styles.typeText, type === 'fixed' && styles.typeTextActive]}>고정지출</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.typeButton, type === 'income' && styles.typeIncomeActive]}
+          onPress={() => { setType('income'); setCategory('수입') }}
+        >
+          <Text style={[styles.typeText, type === 'income' && styles.typeTextActive]}>수입</Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.label}>카테고리</Text>
@@ -83,6 +108,15 @@ export default function AddScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      <Text style={styles.label}>날짜</Text>
+      <TextInput
+        style={styles.input}
+        value={date}
+        onChangeText={setDate}
+        placeholder="YYYY-MM-DD"
+        maxLength={10}
+      />
 
       <Text style={styles.label}>메모 (선택)</Text>
       <TextInput
@@ -100,13 +134,16 @@ export default function AddScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#f8f8ff' },
-  title: { fontSize: 24, fontWeight: 'bold', marginTop: 60, marginBottom: 24, color: '#1a1a2e' },
+  container: { flex: 1, padding: 24, backgroundColor: '#F2F4F8' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 60, marginBottom: 24 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
   label: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 8, marginTop: 16 },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 14, fontSize: 16, backgroundColor: '#fff' },
   row: { flexDirection: 'row', gap: 10 },
   typeButton: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fff' },
-  typeActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  typeActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  typeIncomeActive: { backgroundColor: '#16A34A', borderColor: '#16A34A' },
   typeText: { color: '#555', fontWeight: '500' },
   typeTextActive: { color: '#fff' },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
