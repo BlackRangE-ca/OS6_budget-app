@@ -10,6 +10,8 @@ import SignupScreen from './app/(auth)/signup'
 import DashboardScreen from './app/(tabs)/index'
 import AddScreen from './app/(tabs)/add'
 import AnalysisScreen from './app/(tabs)/analysis'
+import BudgetScreen from './app/(tabs)/budget'
+import EditScreen from './app/edit'
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
@@ -19,8 +21,18 @@ function MainTabs() {
     <Tab.Navigator screenOptions={{ headerShown: false }}>
       <Tab.Screen name="홈" component={DashboardScreen} />
       <Tab.Screen name="추가" component={AddScreen} />
+      <Tab.Screen name="예산" component={BudgetScreen} />
       <Tab.Screen name="분석" component={AnalysisScreen} />
     </Tab.Navigator>
+  )
+}
+
+function AuthStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="Edit" component={EditScreen} />
+    </Stack.Navigator>
   )
 }
 
@@ -45,7 +57,7 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
-          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen name="Main" component={AuthStack} />
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
