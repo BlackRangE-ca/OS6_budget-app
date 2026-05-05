@@ -1,17 +1,35 @@
+import { useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { analyzeConsumptionType, Expense } from "../../lib/analyzeConsumption";
 import { analyzeCategorySpending } from "../../lib/categoryAnalysis";
-
-const sampleExpenses: Expense[] = [
-  { category: "식비", amount: 300000 },
-  { category: "문화", amount: 150000 },
-  { category: "쇼핑", amount: 200000 },
-  { category: "교통", amount: 80000 },
-];
+import { supabase } from "../../lib/supabase";
 
 export default function AnalysisScreen() {
-  const result = analyzeConsumptionType(sampleExpenses);
-  const categoryResult = analyzeCategorySpending(sampleExpenses);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchExpenses();
+    }, [])
+  );
+
+  async function fetchExpenses() {
+    const { data: { user } } = await supabase.auth.getUser();
+    const thisMonth = new Date().toISOString().slice(0, 7);
+
+    const { data } = await supabase
+      .from("transactions")
+      .select("category, amount")
+      .eq("user_id", user!.id)
+      .gte("date", `${thisMonth}-01`)
+      .lte("date", `${thisMonth}-31`);
+
+    if (data) setExpenses(data as Expense[]);
+  }
+
+  const result = analyzeConsumptionType(expenses);
+  const categoryResult = analyzeCategorySpending(expenses);
 
   return (
     <ScrollView style={styles.container}>
