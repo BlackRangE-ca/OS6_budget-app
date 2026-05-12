@@ -282,6 +282,7 @@ export default function AnalysisScreen() {
   const [benchmarks, setBenchmarks] = useState<BenchmarkComparison[]>([])
   const [overSpent, setOverSpent] = useState<string[]>([])
   const [monthTrends, setMonthTrends] = useState<MonthTrend[]>([])
+  const [spikedCategories, setSpikedCategories] = useState<{ category: string; diff: number; thisAmt: number; lastAmt: number }[]>([])
 
   useFocusEffect(useCallback(() => { fetchData() }, []))
 
@@ -355,6 +356,24 @@ export default function AnalysisScreen() {
         lastCatMap[t.category] = (lastCatMap[t.category] ?? 0) + t.amount
       })
 
+      // 전월 대비 50% 이상 급등 카테고리 탐지
+      const spiked = Object.entries(catMap)
+        .filter(([cat, amt]) => {
+          const lastAmt = lastCatMap[cat] ?? 0
+          return lastAmt > 0 && ((amt as number) - lastAmt) / lastAmt >= 0.5
+        })
+        .map(([cat, amt]) => {
+          const lastAmt = lastCatMap[cat] ?? 0
+          return {
+            category: cat,
+            diff: Math.round(((amt as number) - lastAmt) / lastAmt * 100),
+            thisAmt: amt as number,
+            lastAmt,
+          }
+        })
+        .sort((a, b) => b.diff - a.diff)
+      setSpikedCategories(spiked)
+
       const changeList: { label: string; isIncrease: boolean; diff: number; cat: string }[] = []
       Object.entries(catMap).forEach(([cat, amt]) => {
         const lastAmt = lastCatMap[cat] ?? 0
@@ -404,6 +423,22 @@ export default function AnalysisScreen() {
           <Text style={styles.warningText}>
             {overSpent.join(', ')} 지출이 사회초년생 권장 비율보다 높아요
           </Text>
+        </View>
+      )}
+
+      {/* 급등 카테고리 경고 */}
+      {spikedCategories.length > 0 && (
+        <View style={[styles.card, styles.spikeCard]}>
+          <Text style={styles.warningTitle}>📈 지난달 대비 급등</Text>
+          {spikedCategories.map(({ category, diff, thisAmt, lastAmt }) => (
+            <View key={category} style={styles.spikeRow}>
+              <Text style={styles.spikeCat}>{category}</Text>
+              <Text style={styles.spikeDiff}>+{diff}%</Text>
+              <Text style={styles.spikeDetail}>
+                {lastAmt.toLocaleString()}원 → {thisAmt.toLocaleString()}원
+              </Text>
+            </View>
+          ))}
         </View>
       )}
 
@@ -482,8 +517,13 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 12 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 16 },
   warningCard: { backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA' },
-  warningTitle: { fontSize: 14, fontWeight: '700', color: '#C2410C', marginBottom: 4 },
+  warningTitle: { fontSize: 14, fontWeight: '700', color: '#C2410C', marginBottom: 8 },
   warningText: { fontSize: 13, color: '#9A3412', lineHeight: 20 },
+  spikeCard: { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
+  spikeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  spikeCat: { fontSize: 13, fontWeight: '700', color: '#111827', width: 40 },
+  spikeDiff: { fontSize: 13, fontWeight: '800', color: '#EF4444', width: 44 },
+  spikeDetail: { fontSize: 12, color: '#6B7280', flex: 1 },
   badgeRow: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 20 },
   badge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   badgeRed: { backgroundColor: '#FEF3C7' },
