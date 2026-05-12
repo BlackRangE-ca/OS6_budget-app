@@ -54,15 +54,14 @@ export default function SalaryScreen() {
   }
 
   async function handleSave() {
-    const rawSalary = parseNumber(salary)
-    if (!rawSalary) return
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
+    const rawSalary = parseNumber(salary)
     const rawBudget = parseNumber(budgetAmount)
     const { error } = await supabase.from('budgets').upsert({
       user_id: user!.id,
       month: thisMonth,
-      salary: Number(rawSalary),
+      salary: rawSalary ? Number(rawSalary) : null,
       payday: payday ? Number(payday) : null,
       amount: rawBudget ? Number(rawBudget) : null,
     }, { onConflict: 'user_id,month' })

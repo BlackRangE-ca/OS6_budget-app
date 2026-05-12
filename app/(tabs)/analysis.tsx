@@ -291,8 +291,10 @@ export default function AnalysisScreen() {
 
     const months = [2, 1, 0].map(offset => {
       const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
       return {
-        month: d.toISOString().slice(0, 7),
+        month: `${y}-${m}`,
         label: `${d.getMonth() + 1}월`,
       }
     })
