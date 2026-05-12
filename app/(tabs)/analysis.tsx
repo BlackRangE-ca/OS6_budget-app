@@ -145,10 +145,10 @@ const scoreStyles = StyleSheet.create({
   totalScore: { fontSize: 12, fontWeight: '600' },
   bars: { gap: 10 },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  barLabel: { width: 44, fontSize: 12, color: '#6B7280', fontWeight: '600' },
+  barLabel: { width: 58, fontSize: 12, color: '#6B7280', fontWeight: '600' },
   barBg: { flex: 1, height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden' },
   barFill: { height: 8, borderRadius: 4 },
-  barValue: { width: 32, fontSize: 11, color: '#9CA3AF', textAlign: 'right' },
+  barValue: { width: 36, fontSize: 11, color: '#9CA3AF', textAlign: 'right' },
 })
 
 function BenchmarkCard({ benchmarks }: { benchmarks: BenchmarkComparison[] }) {
@@ -197,7 +197,7 @@ const bmStyles = StyleSheet.create({
   badge_green: { backgroundColor: '#DCFCE7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   text_red: { fontSize: 12, color: '#EF4444', fontWeight: '700' },
   text_green: { fontSize: 12, color: '#16A34A', fontWeight: '700' },
-  hint: { fontSize: 12, color: '#6B7280' },
+  hint: { flex: 1, fontSize: 12, color: '#6B7280' },
 })
 
 type MonthTrend = { label: string; total: number; month: string }
@@ -563,8 +563,8 @@ const styles = StyleSheet.create({
   warningText: { fontSize: 13, color: '#9A3412', lineHeight: 20 },
   spikeCard: { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
   spikeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  spikeCat: { fontSize: 13, fontWeight: '700', color: '#111827', width: 40 },
-  spikeDiff: { fontSize: 13, fontWeight: '800', color: '#EF4444', width: 44 },
+  spikeCat: { fontSize: 13, fontWeight: '700', color: '#111827', width: 52 },
+  spikeDiff: { fontSize: 13, fontWeight: '800', color: '#EF4444', width: 50 },
   spikeDetail: { fontSize: 12, color: '#6B7280', flex: 1 },
   badgeRow: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 20 },
   badge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
@@ -576,8 +576,8 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', color: '#9CA3AF', paddingVertical: 20 },
   summaryText: { fontSize: 15, color: '#374151', lineHeight: 24 },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  catName: { width: 36, fontSize: 13, color: '#374151', fontWeight: '600' },
+  catName: { width: 44, fontSize: 13, color: '#374151', fontWeight: '600' },
   catBarWrap: { flex: 1, height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden' },
   catBar: { height: 8, borderRadius: 4 },
-  catAmount: { fontSize: 11, color: '#6B7280', width: 110, textAlign: 'right', flexShrink: 0 },
+  catAmount: { fontSize: 11, color: '#6B7280', width: 120, textAlign: 'right', flexShrink: 0 },
 })
