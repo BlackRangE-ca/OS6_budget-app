@@ -199,6 +199,78 @@ const bmStyles = StyleSheet.create({
   hint: { fontSize: 12, color: '#6B7280' },
 })
 
+type MonthTrend = { label: string; total: number; month: string }
+
+function TrendChart({ months }: { months: MonthTrend[] }) {
+  const maxVal = Math.max(...months.map(m => m.total), 1)
+  if (months.every(m => m.total === 0)) {
+    return <Text style={{ color: '#9CA3AF', fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>데이터가 부족해요</Text>
+  }
+
+  return (
+    <View>
+      <View style={trendStyles.bars}>
+        {months.map((m, i) => {
+          const ratio = m.total / maxVal
+          const prev = months[i - 1]
+          const diff = prev && prev.total > 0
+            ? Math.round((m.total - prev.total) / prev.total * 100)
+            : null
+          const isUp = diff !== null && diff > 0
+          const isDown = diff !== null && diff < 0
+
+          return (
+            <View key={m.month} style={trendStyles.barCol}>
+              <View style={trendStyles.barWrap}>
+                <View style={[trendStyles.bar, {
+                  height: Math.max(4, ratio * 80),
+                  backgroundColor: i === months.length - 1 ? '#2563EB' : '#BFDBFE',
+                }]} />
+              </View>
+              {diff !== null && (
+                <Text style={[trendStyles.diff, { color: isUp ? '#EF4444' : isDown ? '#16A34A' : '#9CA3AF' }]}>
+                  {isUp ? '▲' : isDown ? '▼' : '—'}{Math.abs(diff)}%
+                </Text>
+              )}
+              <Text style={trendStyles.monthLabel}>{m.label}</Text>
+              <Text style={trendStyles.amount}>{(m.total / 10000).toFixed(0)}만</Text>
+            </View>
+          )
+        })}
+      </View>
+
+      {/* 트렌드 요약 문장 */}
+      {months.length >= 2 && (() => {
+        const cur = months[months.length - 1]
+        const prv = months[months.length - 2]
+        if (prv.total === 0) return null
+        const diff = Math.round((cur.total - prv.total) / prv.total * 100)
+        const isUp = diff > 0
+        return (
+          <View style={[trendStyles.summary, { backgroundColor: isUp ? '#FEF2F2' : '#F0FDF4' }]}>
+            <Text style={[trendStyles.summaryText, { color: isUp ? '#EF4444' : '#16A34A' }]}>
+              {isUp ? '📈' : '📉'} 지난달보다 지출 {Math.abs(diff)}% {isUp ? '증가' : '감소'}했어요
+              {!isUp && ' · 잘 하고 있어요!'}
+            </Text>
+          </View>
+        )
+      })()}
+    </View>
+  )
+}
+
+const trendStyles = StyleSheet.create({
+  bars: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end', height: 120, paddingBottom: 4 },
+  barCol: { alignItems: 'center', gap: 4, flex: 1 },
+  barWrap: { height: 80, justifyContent: 'flex-end', width: '60%' },
+  bar: { width: '100%', borderRadius: 6 },
+  diff: { fontSize: 10, fontWeight: '700' },
+  monthLabel: { fontSize: 12, color: '#6B7280', fontWeight: '600' },
+  amount: { fontSize: 11, color: '#9CA3AF' },
+  summary: { marginTop: 12, borderRadius: 10, padding: 10 },
+  summaryText: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
+})
+
 export default function AnalysisScreen() {
   const [topCategory, setTopCategory] = useState('')
   const [topRatio, setTopRatio] = useState(0)
@@ -209,55 +281,77 @@ export default function AnalysisScreen() {
   const [score, setScore] = useState<FinancialScore | null>(null)
   const [benchmarks, setBenchmarks] = useState<BenchmarkComparison[]>([])
   const [overSpent, setOverSpent] = useState<string[]>([])
+  const [monthTrends, setMonthTrends] = useState<MonthTrend[]>([])
 
   useFocusEffect(useCallback(() => { fetchData() }, []))
 
   async function fetchData() {
     const { data: { user } } = await supabase.auth.getUser()
     const now = new Date()
-    const thisMonth = now.toISOString().slice(0, 7)
-    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const lastMonth = lastMonthDate.toISOString().slice(0, 7)
 
-    const [{ data: txData }, { data: lastTxData }, { data: budgetData }] = await Promise.all([
-      supabase.from('transactions').select('*').eq('user_id', user!.id)
-        .gte('date', `${thisMonth}-01`).lte('date', `${thisMonth}-31`),
-      supabase.from('transactions').select('*').eq('user_id', user!.id)
-        .gte('date', `${lastMonth}-01`).lte('date', `${lastMonth}-31`),
-      supabase.from('budgets').select('*').eq('user_id', user!.id).eq('month', thisMonth).single(),
+    const months = [2, 1, 0].map(offset => {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      return {
+        month: `${y}-${m}`,
+        label: `${d.getMonth() + 1}월`,
+      }
+    })
+
+    const [txResults, { data: budgetData }] = await Promise.all([
+      Promise.all(months.map(({ month }) =>
+        supabase.from('transactions').select('*').eq('user_id', user!.id)
+          .gte('date', `${month}-01`).lte('date', `${month}-31`)
+      )),
+      supabase.from('budgets').select('*').eq('user_id', user!.id)
+        .eq('month', months[2].month).single(),
     ])
 
-    if (!txData || txData.length === 0) return
+    const [twoMonthsAgoData, lastTxData, thisData] = txResults.map(r => r.data ?? [])
 
-    const spendingTx = txData.filter(t => t.type !== 'income')
-    const fixedTx = txData.filter(t => t.type === 'fixed')
+    if (!thisData || thisData.length === 0) return
+
+    const spendingTx = thisData.filter((t: any) => t.type !== 'income')
+    const fixedTx = thisData.filter((t: any) => t.type === 'fixed')
 
     // 카테고리별 합계
     const catMap: Record<string, number> = {}
-    spendingTx.forEach(t => { catMap[t.category] = (catMap[t.category] ?? 0) + t.amount })
-    const total = Object.values(catMap).reduce((a, b) => a + b, 0)
-    const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1])
+    spendingTx.forEach((t: any) => { catMap[t.category] = (catMap[t.category] ?? 0) + t.amount })
+    const total = Object.values(catMap).reduce((a: number, b: number) => a + b, 0)
+    const sorted = Object.entries(catMap).sort((a, b) => (b[1] as number) - (a[1] as number))
 
     if (sorted.length > 0) {
       setTopCategory(sorted[0][0])
-      setTopRatio(Math.round(sorted[0][1] / total * 100))
-      setAllCategories(sorted.filter(([, amt]) => amt > 0).map(([cat, amt]) => ({
-        category: cat, amount: amt, ratio: Math.round(amt / total * 100),
+      setTopRatio(Math.round((sorted[0][1] as number) / total * 100))
+      setAllCategories(sorted.filter(([, amt]) => (amt as number) > 0).map(([cat, amt]) => ({
+        category: cat, amount: amt as number, ratio: Math.round((amt as number) / total * 100),
       })))
     }
 
     // 일별 합계
     const daily = Array(31).fill(0)
-    spendingTx.forEach(t => {
+    spendingTx.forEach((t: any) => {
       const day = parseInt(t.date.split('-')[2]) - 1
       if (day >= 0 && day < 31) daily[day] += t.amount
     })
     setDailyTotals(daily)
 
+    // 3개월 트렌드
+    const trendData = [twoMonthsAgoData, lastTxData, spendingTx]
+    setMonthTrends(months.map(({ month, label }, i) => ({
+      month,
+      label,
+      total: (trendData[i] ?? [])
+        .filter((t: any) => t.type !== 'income')
+        .reduce((s: number, t: any) => s + t.amount, 0),
+    })))
+
     // 지난달 대비 변화
-    if (lastTxData && lastTxData.length > 0) {
+    const lastSpending = lastTxData.filter((t: any) => t.type !== 'income')
+    if (lastSpending.length > 0) {
       const lastCatMap: Record<string, number> = {}
-      lastTxData.filter(t => t.type !== 'income').forEach(t => {
+      lastSpending.forEach((t: any) => {
         lastCatMap[t.category] = (lastCatMap[t.category] ?? 0) + t.amount
       })
 
@@ -265,7 +359,7 @@ export default function AnalysisScreen() {
       Object.entries(catMap).forEach(([cat, amt]) => {
         const lastAmt = lastCatMap[cat] ?? 0
         if (lastAmt > 0) {
-          const diff = Math.round((amt - lastAmt) / lastAmt * 100)
+          const diff = Math.round(((amt as number) - lastAmt) / lastAmt * 100)
           if (Math.abs(diff) >= 5)
             changeList.push({ label: `${cat} ${diff > 0 ? '증가' : '감소'} ${diff > 0 ? '+' : ''}${diff}%`, isIncrease: diff > 0, diff: Math.abs(diff), cat })
         }
@@ -285,9 +379,7 @@ export default function AnalysisScreen() {
     }
 
     // 재무 점수 & 벤치마크
-    const result = analyzeConsumptionType(
-      txData, budgetData?.salary, budgetData?.amount, fixedTx
-    )
+    const result = analyzeConsumptionType(thisData, budgetData?.salary, budgetData?.amount, fixedTx)
     setScore(result.score)
     setBenchmarks(result.benchmarks)
     setOverSpent(result.overSpentCategories)
@@ -358,15 +450,23 @@ export default function AnalysisScreen() {
         </View>
       )}
 
+      {/* 3개월 트렌드 */}
+      {monthTrends.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>3개월 지출 트렌드</Text>
+          <TrendChart months={monthTrends} />
+        </View>
+      )}
+
       {/* 라인 그래프 */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>한달 소비 그래프</Text>
+        <Text style={styles.cardTitle}>이번달 일별 소비</Text>
         <LineGraph dailyTotals={dailyTotals} />
       </View>
 
       {/* 주요 변화 */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>주요 변화</Text>
+        <Text style={styles.cardTitle}>카테고리별 변화</Text>
         <Text style={styles.summaryText}>{changeSummary || '지난달 데이터가 없어요.'}</Text>
       </View>
 

@@ -47,7 +47,7 @@ export default function DashboardScreen() {
         .order('date', { ascending: false }),
       supabase
         .from('budgets')
-        .select('amount')
+        .select('*')
         .eq('user_id', user!.id)
         .eq('month', thisMonth)
         .single(),
