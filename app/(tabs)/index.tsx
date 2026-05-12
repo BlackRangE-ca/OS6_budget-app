@@ -20,12 +20,13 @@ export default function DashboardScreen() {
   const [topCategories, setTopCategories] = useState<{ category: string; ratio: number }[]>([])
   const [consumptionType, setConsumptionType] = useState('')
   const [lastMonthDiff, setLastMonthDiff] = useState<number | null>(null)
+  const [daysUntilPayday, setDaysUntilPayday] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   const now = new Date()
-  const thisMonth = now.toISOString().slice(0, 7)
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const lastMonth = lastMonthDate.toISOString().slice(0, 7)
+  const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
   const monthLabel = `${now.getMonth() + 1}월`
 
   useFocusEffect(
@@ -80,6 +81,16 @@ export default function DashboardScreen() {
     }
     setBudget(budgetData?.amount ?? null)
 
+    if (budgetData?.payday) {
+      const today = now.getDate()
+      const payday = budgetData.payday
+      const next = today < payday
+        ? new Date(now.getFullYear(), now.getMonth(), payday)
+        : new Date(now.getFullYear(), now.getMonth() + 1, payday)
+      const days = Math.round((next.getTime() - new Date(now.getFullYear(), now.getMonth(), today).getTime()) / 86400000)
+      setDaysUntilPayday(days)
+    }
+
     if (lastTxData && lastTxData.length > 0) {
       const lastTotal = lastTxData.reduce((sum, t) => sum + t.amount, 0)
       const thisTotal = txData ? txData.reduce((sum, t) => sum + t.amount, 0) : 0
@@ -128,7 +139,16 @@ export default function DashboardScreen() {
 
       {/* Summary Card */}
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>{monthLabel} 소비 요약</Text>
+        <View style={styles.cardLabelRow}>
+          <Text style={styles.cardLabel}>{monthLabel} 소비 요약</Text>
+          {daysUntilPayday !== null && (
+            <View style={styles.paydayBadge}>
+              <Text style={styles.paydayText}>
+                {daysUntilPayday === 0 ? '🎉 오늘 급여일' : `💸 급여일까지 ${daysUntilPayday}일`}
+              </Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.consumptionType}>{consumptionType || '데이터 없음'}</Text>
 
         {lastMonthDiff !== null && (
@@ -236,7 +256,10 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, color: '#9CA3AF', marginTop: 2 },
   addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
   card: { backgroundColor: '#fff', borderRadius: 20, marginHorizontal: 16, marginBottom: 12, padding: 20 },
-  cardLabel: { fontSize: 13, color: '#9CA3AF', marginBottom: 6 },
+  cardLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  cardLabel: { fontSize: 13, color: '#9CA3AF' },
+  paydayBadge: { backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  paydayText: { fontSize: 11, color: '#2563EB', fontWeight: '600' },
   consumptionType: { fontSize: 28, fontWeight: '800', color: '#111827', marginBottom: 8 },
   trendText: { fontSize: 13, color: '#6B7280', marginBottom: 10 },
   progressBg: { height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden', marginBottom: 14 },
