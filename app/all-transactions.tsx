@@ -35,7 +35,7 @@ export default function AllTransactionsScreen() {
       .from('transactions').select('*')
       .eq('user_id', user!.id)
       .gte('date', `${month}-01`)
-      .lte('date', `${month}-31`)
+      .lt('date', `${shiftMonth(month, 1)}-01`)
       .order('date', { ascending: false })
     if (data) {
       setTransactions(data)

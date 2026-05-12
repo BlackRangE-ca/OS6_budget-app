@@ -22,7 +22,10 @@ export default function SalaryScreen() {
   const [variableTx, setVariableTx] = useState<Transaction[]>([])
   const [saving, setSaving] = useState(false)
 
-  const thisMonth = new Date().toISOString().slice(0, 7)
+  const now = new Date()
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
 
   useFocusEffect(
     useCallback(() => {
@@ -38,7 +41,7 @@ export default function SalaryScreen() {
       supabase.from('transactions').select('*')
         .eq('user_id', user!.id)
         .gte('date', `${thisMonth}-01`)
-        .lte('date', `${thisMonth}-31`)
+        .lt('date', `${nextMonth}-01`)
         .order('date', { ascending: false }),
     ])
 

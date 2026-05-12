@@ -27,6 +27,8 @@ export default function DashboardScreen() {
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
   const monthLabel = `${now.getMonth() + 1}월`
 
   useFocusEffect(
@@ -44,7 +46,7 @@ export default function DashboardScreen() {
         .select('*')
         .eq('user_id', user!.id)
         .gte('date', `${thisMonth}-01`)
-        .lte('date', `${thisMonth}-31`)
+        .lt('date', `${nextMonth}-01`)
         .order('date', { ascending: false }),
       supabase
         .from('budgets')
@@ -57,7 +59,7 @@ export default function DashboardScreen() {
         .select('amount')
         .eq('user_id', user!.id)
         .gte('date', `${lastMonth}-01`)
-        .lte('date', `${lastMonth}-31`),
+        .lt('date', `${thisMonth}-01`),
     ])
 
     if (txData) {

@@ -326,7 +326,7 @@ export default function AnalysisScreen() {
     const [txResults, { data: budgetData }] = await Promise.all([
       Promise.all(months.map(({ month }) =>
         supabase.from('transactions').select('*').eq('user_id', user!.id)
-          .gte('date', `${month}-01`).lte('date', `${month}-31`)
+          .gte('date', `${month}-01`).lt('date', `${shiftMonth(month, 1)}-01`)
       )),
       supabase.from('budgets').select('*').eq('user_id', user!.id)
         .eq('month', months[2].month).single(),
