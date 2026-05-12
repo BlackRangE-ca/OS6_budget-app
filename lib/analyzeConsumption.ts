@@ -182,80 +182,139 @@ export function analyzeConsumptionType(
 
   const budgetUsedRatio = budget && budget > 0 ? totalAmount / budget : null
 
-  // 각 조건을 독립적으로 평가
-  const flags = {
-    savings:      ratio('저축') >= 0.3,
-    housing:      ratio('주거') >= 0.4,
-    concentrated: topCategoryRatio >= 0.5,
-    leisure:      ratio('쇼핑') + ratio('문화') >= 0.4,
-    food:         ratio('식비') >= 0.35,
-    telecom:      ratio('통신') >= 0.2,
-    medical:      ratio('의료') >= 0.25,
-    transport:    ratio('교통') >= 0.25,
-    overBudget:   budgetUsedRatio !== null && budgetUsedRatio > 1.1,
+  // 단독 유형 정의 (label, 조건비율, description, advice)
+  type SingleType = {
+    key: string
+    label: string
+    ratio: number
+    description: string
+    advice: string
   }
+
+  const singleTypes: SingleType[] = [
+    {
+      key: 'savings',
+      label: '저축 중심형',
+      ratio: ratio('저축'),
+      description: '전체 지출 중 저축 비중이 높아 미래 대비 성향이 강합니다.',
+      advice: '저축을 유지하되, 생활비가 지나치게 부족하지 않은지 점검해보세요.',
+    },
+    {
+      key: 'housing',
+      label: '주거비 부담형',
+      ratio: ratio('주거'),
+      description: '주거비 비중이 높아 다른 소비 여력이 줄어들 수 있습니다.',
+      advice: '월세·관리비 등 고정 주거비를 점검하고 예산 비중을 조정해보세요.',
+    },
+    {
+      key: 'concentrated',
+      label: '편중 소비형',
+      ratio: topCategoryRatio,
+      description: `${topCategory} 지출이 전체 소비의 절반 이상을 차지합니다.`,
+      advice: `${topCategory} 소비를 20%만 줄여도 월 ${Math.round(topCategoryAmount * 0.2).toLocaleString()}원 절약할 수 있어요.`,
+    },
+    {
+      key: 'leisure',
+      label: '여가·쇼핑 소비형',
+      ratio: ratio('쇼핑') + ratio('문화'),
+      description: '쇼핑과 문화 소비 비중이 높아 선택적 소비가 많은 편입니다.',
+      advice: '쇼핑과 문화생활 예산을 미리 정해두면 충동 소비를 줄일 수 있어요.',
+    },
+    {
+      key: 'food',
+      label: '식비 집중형',
+      ratio: ratio('식비'),
+      description: '식비 비중이 높아 외식이나 배달 소비가 많을 가능성이 있습니다.',
+      advice: '외식·배달 횟수를 줄이고 주간 식비 한도를 설정해보세요.',
+    },
+    {
+      key: 'telecom',
+      label: '통신비 부담형',
+      ratio: ratio('통신'),
+      description: '통신비 비중이 상대적으로 높은 편입니다.',
+      advice: '요금제·구독 서비스·부가서비스를 점검해 고정비를 줄여보세요.',
+    },
+    {
+      key: 'medical',
+      label: '건강관리 지출형',
+      ratio: ratio('의료'),
+      description: '의료 관련 지출 비중이 높은 소비 패턴입니다.',
+      advice: '반복적으로 발생하는 의료비가 있다면 월별 예산에 따로 반영해보세요.',
+    },
+    {
+      key: 'transport',
+      label: '이동비 부담형',
+      ratio: ratio('교통'),
+      description: '교통비 비중이 높아 이동 관련 지출이 많은 편입니다.',
+      advice: '대중교통 정기권, 이동 경로 조정 등으로 교통비를 관리해보세요.',
+    },
+    {
+      key: 'etc',
+      label: '기타지출 관리필요형',
+      ratio: ratio('기타'),
+      description: '기타 항목 비중이 높아 소비 내역이 명확히 분류되지 않고 있습니다.',
+      advice: '기타 지출을 구체적인 카테고리로 나누면 소비 분석 정확도가 올라가요.',
+    },
+  ]
+
+  // 임계값 기준
+  const THRESHOLDS: Record<string, number> = {
+    savings: 0.3, housing: 0.4, concentrated: 0.5,
+    leisure: 0.4, food: 0.35, telecom: 0.2,
+    medical: 0.25, transport: 0.25, etc: 0.3,
+  }
+
+  // 조건 충족된 유형을 비율 내림차순으로 수집
+  const triggered = singleTypes
+    .filter(t => t.ratio >= THRESHOLDS[t.key])
+    .sort((a, b) => b.ratio - a.ratio)
+
+  // 예산 초과 여부
+  const isOverBudget = budgetUsedRatio !== null && budgetUsedRatio > 1.1
 
   let type: string
   let description: string
   let advice: string
 
-  // 중복 조건 조합을 먼저 처리
-  if (flags.savings && flags.housing) {
-    type = '주거비 절약형'
-    description = '주거비 부담이 크지만 저축도 꾸준히 챙기는 알뜰한 패턴이에요.'
-    advice = '주거비를 줄이면 저축 여력이 더 커져요. 월세 재협상이나 관리비 절감을 고려해보세요.'
-  } else if (flags.savings && flags.overBudget) {
-    type = '예산 초과 저축형'
-    description = '저축은 열심히 하지만 전체 지출이 예산을 넘어서고 있어요.'
-    advice = '저축 금액을 예산에 포함해서 계획하면 예산 초과를 막을 수 있어요.'
-  } else if (flags.housing && flags.overBudget) {
-    type = '주거비 과부담형'
-    description = '주거비가 높은 데다 예산까지 초과한 위험한 패턴이에요.'
-    advice = '주거 환경 변경을 검토하거나 다른 항목 지출을 대폭 줄여야 해요.'
-  } else if (flags.leisure && flags.overBudget) {
-    type = '여가 과소비형'
-    description = '쇼핑·문화 지출이 많으면서 예산도 초과하고 있어요.'
-    advice = '여가 예산을 먼저 정해두고 그 안에서만 쓰는 습관을 만들어보세요.'
-  } else if (flags.savings) {
-    type = '저축 중심형'
-    description = '전체 지출 중 저축 비중이 높아 미래 대비 성향이 강합니다.'
-    advice = '저축을 유지하되, 생활비가 지나치게 부족하지 않은지 점검해보세요.'
-  } else if (flags.housing) {
-    type = '주거비 부담형'
-    description = '주거비 비중이 높아 다른 소비 여력이 줄어들 수 있습니다.'
-    advice = '월세·관리비 등 고정 주거비를 점검하고 예산 비중을 조정해보세요.'
-  } else if (flags.concentrated) {
-    type = '편중 소비형'
-    description = `${topCategory} 지출이 전체 소비의 절반 이상을 차지합니다.`
-    advice = `${topCategory} 소비를 20%만 줄여도 월 ${Math.round(topCategoryAmount * 0.2).toLocaleString()}원 절약할 수 있어요.`
-  } else if (flags.leisure) {
-    type = '여가·쇼핑 소비형'
-    description = '쇼핑과 문화 소비 비중이 높아 선택적 소비가 많은 편입니다.'
-    advice = '쇼핑과 문화생활 예산을 미리 정해두면 충동 소비를 줄일 수 있어요.'
-  } else if (flags.food) {
-    type = '식비 집중형'
-    description = '식비 비중이 높아 외식이나 배달 소비가 많을 가능성이 있습니다.'
-    advice = '외식·배달 횟수를 줄이고 주간 식비 한도를 설정해보세요.'
-  } else if (flags.telecom) {
-    type = '통신비 부담형'
-    description = '통신비 비중이 상대적으로 높은 편입니다.'
-    advice = '요금제·구독 서비스·부가서비스를 점검해 고정비를 줄여보세요.'
-  } else if (flags.medical) {
-    type = '건강관리 지출형'
-    description = '의료 관련 지출 비중이 높은 소비 패턴입니다.'
-    advice = '반복적으로 발생하는 의료비가 있다면 월별 예산에 따로 반영해보세요.'
-  } else if (flags.transport) {
-    type = '이동비 부담형'
-    description = '교통비 비중이 높아 이동 관련 지출이 많은 편입니다.'
-    advice = '대중교통 정기권, 이동 경로 조정 등으로 교통비를 관리해보세요.'
-  } else if (flags.overBudget) {
-    type = '과소비 위험형'
-    description = `이번달 예산의 ${Math.round(budgetUsedRatio! * 100)}%를 사용했습니다.`
-    advice = '카테고리별 한도를 설정하고 주간 단위로 소비를 점검하는 것이 좋아요.'
-  } else {
+  if (triggered.length === 0 && !isOverBudget) {
     type = '균형 소비형'
     description = '특정 카테고리에 소비가 크게 치우치지 않은 안정적인 소비 패턴입니다.'
     advice = '현재 소비 패턴을 유지하되, 목표 저축액을 먼저 설정해보세요.'
+  } else if (triggered.length === 0 && isOverBudget) {
+    type = '과소비 위험형'
+    description = `이번달 예산의 ${Math.round(budgetUsedRatio! * 100)}%를 사용했습니다.`
+    advice = '카테고리별 한도를 설정하고 주간 단위로 소비를 점검하는 것이 좋아요.'
+  } else if (triggered.length === 1 && !isOverBudget) {
+    // 단독 조건
+    type = triggered[0].label
+    description = triggered[0].description
+    advice = triggered[0].advice
+  } else {
+    // 2개 이상 조건 동시 충족 → 동적 복합형 생성
+    const primary = triggered[0]
+    const secondary = triggered[1] ?? null
+    const hasSavings = triggered.some(t => t.key === 'savings')
+
+    if (hasSavings && triggered.length >= 2) {
+      // 저축이 포함된 복합: 절약형으로 긍정 표현
+      const burden = triggered.find(t => t.key !== 'savings')!
+      type = `${burden.label.replace('형', '')} 절약형`
+      description = `${burden.description} 그러나 저축도 꾸준히 챙기고 있어요.`
+      advice = `${burden.advice} 저축 습관은 유지하세요.`
+    } else if (isOverBudget && secondary) {
+      // 예산 초과 + 주요 부담
+      type = `${primary.label.replace('형', '')} 과소비형`
+      description = `${primary.description} 게다가 예산도 ${Math.round(budgetUsedRatio! * 100)}% 초과했어요.`
+      advice = `${primary.advice} 당장 지출을 줄이는 것이 필요해요.`
+    } else {
+      // 일반 복합형: 상위 2개 조합
+      const secondLabel = secondary ? secondary.label.replace('형', '').replace('소비', '').replace('부담', '').trim() : ''
+      type = secondLabel
+        ? `${primary.label.replace('형', '')}·${secondLabel} 복합형`
+        : primary.label
+      description = `${primary.description} 또한 ${secondary?.description ?? ''}`
+      advice = `${primary.advice} 아울러 ${secondary?.advice ?? ''}`
+    }
   }
 
   const score = calculateFinancialScore(
