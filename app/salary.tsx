@@ -53,17 +53,25 @@ export default function SalaryScreen() {
     }
   }
 
+  const rawSalaryNum = Number(parseNumber(salary))
+  const autoBudget = rawSalaryNum > 0 && !parseNumber(budgetAmount)
+    ? Math.round(rawSalaryNum * 0.7)
+    : null
+
   async function handleSave() {
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
     const rawSalary = parseNumber(salary)
     const rawBudget = parseNumber(budgetAmount)
+    const effectiveBudget = rawBudget
+      ? Number(rawBudget)
+      : (rawSalary ? Math.round(Number(rawSalary) * 0.7) : null)
     const { error } = await supabase.from('budgets').upsert({
       user_id: user!.id,
       month: thisMonth,
       salary: rawSalary ? Number(rawSalary) : null,
       payday: payday ? Number(payday) : null,
-      amount: rawBudget ? Number(rawBudget) : null,
+      amount: effectiveBudget,
     }, { onConflict: 'user_id,month' })
     if (error) Alert.alert('오류', '저장에 실패했습니다.')
     else Alert.alert('완료', '저장됐습니다.')
@@ -97,7 +105,7 @@ export default function SalaryScreen() {
           />
           <Text style={styles.unit}>원</Text>
         </View>
-        <View style={styles.divider} />
+        <Text style={styles.fieldHint}>세금 제외 후 실제 받는 월 수령액</Text>
         <View style={styles.divider} />
         <View style={styles.row}>
           <Text style={styles.fieldLabel}>예산</Text>
@@ -106,10 +114,17 @@ export default function SalaryScreen() {
             value={budgetAmount}
             onChangeText={v => setBudgetAmount(formatNumber(v))}
             keyboardType="numeric"
-            placeholder="이번 달 예산"
+            placeholder="이번 달 소비 한도"
           />
           <Text style={styles.unit}>원</Text>
         </View>
+        {autoBudget ? (
+          <Text style={styles.autoHint}>
+            입력하지 않으면 월급의 70%인 {autoBudget.toLocaleString()}원이 자동 적용돼요
+          </Text>
+        ) : (
+          <Text style={styles.fieldHint}>이번 달 쓸 수 있는 최대 금액 (소비 진행률에 반영)</Text>
+        )}
         <View style={styles.divider} />
         <View style={styles.row}>
           <Text style={styles.fieldLabel}>급여일</Text>
@@ -124,6 +139,7 @@ export default function SalaryScreen() {
           />
           <Text style={styles.unit}>일</Text>
         </View>
+        <Text style={styles.fieldHint}>다음 급여일까지 남은 일수를 계산하는 데 사용돼요</Text>
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
           <Text style={styles.saveBtnText}>{saving ? '저장 중...' : '저장하기'}</Text>
         </TouchableOpacity>
@@ -196,7 +212,9 @@ const styles = StyleSheet.create({
   fieldValue: { fontSize: 15, color: '#6B7280' },
   fieldInput: { flex: 1, fontSize: 16, fontWeight: '600', color: '#111827', backgroundColor: '#F9FAFB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   unit: { fontSize: 14, color: '#6B7280' },
-  divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 4 },
+  divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 8 },
+  fieldHint: { fontSize: 11, color: '#9CA3AF', marginBottom: 4, marginLeft: 4 },
+  autoHint: { fontSize: 12, color: '#2563EB', marginBottom: 4, marginLeft: 4, fontWeight: '500' },
   saveBtn: { backgroundColor: '#2563EB', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 16 },
   saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
