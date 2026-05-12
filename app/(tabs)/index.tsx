@@ -64,8 +64,8 @@ export default function DashboardScreen() {
       const total = txData.reduce((sum, t) => sum + t.amount, 0)
       setTotalAmount(total)
 
-      const expenses: Expense[] = txData.map(t => ({ category: t.category, amount: t.amount }))
-      const result = analyzeConsumptionType(expenses)
+      const expenses: Expense[] = txData.map(t => ({ category: t.category, amount: t.amount, type: t.type }))
+      const result = analyzeConsumptionType(expenses, budgetData?.salary, budgetData?.amount)
       setConsumptionType(result.type)
 
       if (total > 0) {
