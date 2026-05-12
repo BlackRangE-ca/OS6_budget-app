@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -296,7 +296,23 @@ export default function AnalysisScreen() {
   const [monthTrends, setMonthTrends] = useState<MonthTrend[]>([])
   const [spikedCategories, setSpikedCategories] = useState<{ category: string; diff: number; thisAmt: number; lastAmt: number }[]>([])
 
+  // 화면 재진입 시 새로고침 (예: 지출 추가 후 돌아올 때)
   useFocusEffect(useCallback(() => { fetchData(selectedMonth) }, [selectedMonth]))
+  // 월 변경 시 상태 초기화 후 재조회
+  useEffect(() => {
+    setTopCategory('')
+    setTopRatio(0)
+    setAllCategories([])
+    setDailyTotals(Array(31).fill(0))
+    setChanges([])
+    setChangeSummary('')
+    setScore(null)
+    setBenchmarks([])
+    setOverSpent([])
+    setSpikedCategories([])
+    setMonthTrends([])
+    fetchData(selectedMonth)
+  }, [selectedMonth])
 
   async function fetchData(selected: string) {
     const { data: { user } } = await supabase.auth.getUser()
