@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react'
-import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native'
+import { useState, useCallback, useEffect } from 'react'
+import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
+import { Ionicons } from '@expo/vector-icons'
 import Svg, { Circle, G, Polyline, Line, Text as SvgText } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
 import { CATEGORY_COLORS } from '../../lib/constants'
@@ -144,10 +145,10 @@ const scoreStyles = StyleSheet.create({
   totalScore: { fontSize: 12, fontWeight: '600' },
   bars: { gap: 10 },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  barLabel: { width: 44, fontSize: 12, color: '#6B7280', fontWeight: '600' },
+  barLabel: { width: 58, fontSize: 12, color: '#6B7280', fontWeight: '600' },
   barBg: { flex: 1, height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden' },
   barFill: { height: 8, borderRadius: 4 },
-  barValue: { width: 32, fontSize: 11, color: '#9CA3AF', textAlign: 'right' },
+  barValue: { width: 36, fontSize: 11, color: '#9CA3AF', textAlign: 'right' },
 })
 
 function BenchmarkCard({ benchmarks }: { benchmarks: BenchmarkComparison[] }) {
@@ -196,7 +197,7 @@ const bmStyles = StyleSheet.create({
   badge_green: { backgroundColor: '#DCFCE7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   text_red: { fontSize: 12, color: '#EF4444', fontWeight: '700' },
   text_green: { fontSize: 12, color: '#16A34A', fontWeight: '700' },
-  hint: { fontSize: 12, color: '#6B7280' },
+  hint: { flex: 1, fontSize: 12, color: '#6B7280' },
 })
 
 type MonthTrend = { label: string; total: number; month: string }
@@ -271,7 +272,18 @@ const trendStyles = StyleSheet.create({
   summaryText: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
 })
 
+function getMonthStr(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+function shiftMonth(month: string, delta: number) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return getMonthStr(d)
+}
+
 export default function AnalysisScreen() {
+  const currentMonth = getMonthStr(new Date())
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [topCategory, setTopCategory] = useState('')
   const [topRatio, setTopRatio] = useState(0)
   const [allCategories, setAllCategories] = useState<{ category: string; amount: number; ratio: number }[]>([])
@@ -284,26 +296,37 @@ export default function AnalysisScreen() {
   const [monthTrends, setMonthTrends] = useState<MonthTrend[]>([])
   const [spikedCategories, setSpikedCategories] = useState<{ category: string; diff: number; thisAmt: number; lastAmt: number }[]>([])
 
-  useFocusEffect(useCallback(() => { fetchData() }, []))
+  // 화면 재진입 시 새로고침 (예: 지출 추가 후 돌아올 때)
+  useFocusEffect(useCallback(() => { fetchData(selectedMonth) }, [selectedMonth]))
+  // 월 변경 시 상태 초기화 후 재조회
+  useEffect(() => {
+    setTopCategory('')
+    setTopRatio(0)
+    setAllCategories([])
+    setDailyTotals(Array(31).fill(0))
+    setChanges([])
+    setChangeSummary('')
+    setScore(null)
+    setBenchmarks([])
+    setOverSpent([])
+    setSpikedCategories([])
+    setMonthTrends([])
+    fetchData(selectedMonth)
+  }, [selectedMonth])
 
-  async function fetchData() {
+  async function fetchData(selected: string) {
     const { data: { user } } = await supabase.auth.getUser()
-    const now = new Date()
 
     const months = [2, 1, 0].map(offset => {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
-      const y = d.getFullYear()
-      const m = String(d.getMonth() + 1).padStart(2, '0')
-      return {
-        month: `${y}-${m}`,
-        label: `${d.getMonth() + 1}월`,
-      }
+      const m = shiftMonth(selected, -offset)
+      const label = `${parseInt(m.split('-')[1])}월`
+      return { month: m, label }
     })
 
     const [txResults, { data: budgetData }] = await Promise.all([
       Promise.all(months.map(({ month }) =>
         supabase.from('transactions').select('*').eq('user_id', user!.id)
-          .gte('date', `${month}-01`).lte('date', `${month}-31`)
+          .gte('date', `${month}-01`).lt('date', `${shiftMonth(month, 1)}-01`)
       )),
       supabase.from('budgets').select('*').eq('user_id', user!.id)
         .eq('month', months[2].month).single(),
@@ -407,7 +430,23 @@ export default function AnalysisScreen() {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>소비 패턴 분석</Text>
-      <Text style={styles.subtitle}>지난달 대비 변화를 확인해요</Text>
+
+      {/* 월 선택기 */}
+      <View style={styles.monthSelector}>
+        <TouchableOpacity style={styles.monthArrow} onPress={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}>
+          <Ionicons name="chevron-back" size={18} color="#374151" />
+        </TouchableOpacity>
+        <Text style={styles.monthLabel}>
+          {selectedMonth.split('-')[0]}년 {parseInt(selectedMonth.split('-')[1])}월
+        </Text>
+        <TouchableOpacity
+          style={[styles.monthArrow, selectedMonth === currentMonth && styles.monthArrowDisabled]}
+          onPress={() => selectedMonth !== currentMonth && setSelectedMonth(shiftMonth(selectedMonth, 1))}
+          disabled={selectedMonth === currentMonth}
+        >
+          <Ionicons name="chevron-forward" size={18} color={selectedMonth === currentMonth ? '#D1D5DB' : '#374151'} />
+        </TouchableOpacity>
+      </View>
 
       {/* 재무 건강 점수 카드 */}
       {score && (
@@ -512,8 +551,11 @@ export default function AnalysisScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F4F8', padding: 16, paddingTop: 60 },
-  title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  subtitle: { fontSize: 13, color: '#9CA3AF', marginBottom: 20 },
+  title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  monthSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: '#fff', borderRadius: 16, paddingVertical: 12, marginBottom: 12 },
+  monthArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  monthArrowDisabled: { opacity: 0.4 },
+  monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827', minWidth: 100, textAlign: 'center' },
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 12 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 16 },
   warningCard: { backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA' },
@@ -521,8 +563,8 @@ const styles = StyleSheet.create({
   warningText: { fontSize: 13, color: '#9A3412', lineHeight: 20 },
   spikeCard: { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
   spikeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  spikeCat: { fontSize: 13, fontWeight: '700', color: '#111827', width: 40 },
-  spikeDiff: { fontSize: 13, fontWeight: '800', color: '#EF4444', width: 44 },
+  spikeCat: { fontSize: 13, fontWeight: '700', color: '#111827', width: 52 },
+  spikeDiff: { fontSize: 13, fontWeight: '800', color: '#EF4444', width: 50 },
   spikeDetail: { fontSize: 12, color: '#6B7280', flex: 1 },
   badgeRow: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 20 },
   badge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
@@ -534,8 +576,8 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', color: '#9CA3AF', paddingVertical: 20 },
   summaryText: { fontSize: 15, color: '#374151', lineHeight: 24 },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  catName: { width: 36, fontSize: 13, color: '#374151', fontWeight: '600' },
+  catName: { width: 44, fontSize: 13, color: '#374151', fontWeight: '600' },
   catBarWrap: { flex: 1, height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden' },
   catBar: { height: 8, borderRadius: 4 },
-  catAmount: { fontSize: 11, color: '#6B7280', width: 110, textAlign: 'right', flexShrink: 0 },
+  catAmount: { fontSize: 11, color: '#6B7280', width: 120, textAlign: 'right', flexShrink: 0 },
 })
