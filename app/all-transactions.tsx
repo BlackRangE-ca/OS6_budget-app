@@ -11,22 +11,31 @@ const CATEGORY_EMOJI: Record<string, string> = {
   의료: '💊', 문화: '🎬', 쇼핑: '🛍️', 저축: '💰', 기타: '📦', 수입: '💵',
 }
 
+function getMonthStr(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+function shiftMonth(month: string, delta: number) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return getMonthStr(d)
+}
+
 export default function AllTransactionsScreen() {
   const navigation = useNavigation() as any
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [totalSpent, setTotalSpent] = useState(0)
+  const currentMonth = getMonthStr(new Date())
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth)
 
-  const thisMonth = new Date().toISOString().slice(0, 7)
+  useFocusEffect(useCallback(() => { fetchData(selectedMonth) }, [selectedMonth]))
 
-  useFocusEffect(useCallback(() => { fetchData() }, []))
-
-  async function fetchData() {
+  async function fetchData(month: string) {
     const { data: { user } } = await supabase.auth.getUser()
     const { data } = await supabase
       .from('transactions').select('*')
       .eq('user_id', user!.id)
-      .gte('date', `${thisMonth}-01`)
-      .lte('date', `${thisMonth}-31`)
+      .gte('date', `${month}-01`)
+      .lte('date', `${month}-31`)
       .order('date', { ascending: false })
     if (data) {
       setTransactions(data)
@@ -47,15 +56,34 @@ export default function AllTransactionsScreen() {
     ])
   }
 
+  const [y, m] = selectedMonth.split('-')
+  const monthLabel = `${y}년 ${parseInt(m)}월`
+  const isCurrentMonth = selectedMonth === currentMonth
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>전체 지출 내역</Text>
-          <Text style={styles.subtitle}>{new Date().getMonth() + 1}월 · 총 {totalSpent.toLocaleString()}원</Text>
+          <Text style={styles.subtitle}>{monthLabel} · 총 {totalSpent.toLocaleString()}원</Text>
         </View>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={20} color="#6B7280" />
+        </TouchableOpacity>
+      </View>
+
+      {/* 월 선택기 */}
+      <View style={styles.monthSelector}>
+        <TouchableOpacity style={styles.monthArrow} onPress={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}>
+          <Ionicons name="chevron-back" size={18} color="#374151" />
+        </TouchableOpacity>
+        <Text style={styles.monthLabel}>{monthLabel}</Text>
+        <TouchableOpacity
+          style={[styles.monthArrow, isCurrentMonth && styles.monthArrowDisabled]}
+          onPress={() => !isCurrentMonth && setSelectedMonth(shiftMonth(selectedMonth, 1))}
+          disabled={isCurrentMonth}
+        >
+          <Ionicons name="chevron-forward" size={18} color={isCurrentMonth ? '#D1D5DB' : '#374151'} />
         </TouchableOpacity>
       </View>
 
@@ -99,6 +127,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '700', color: '#111827' },
   subtitle: { fontSize: 13, color: '#9CA3AF', marginTop: 2 },
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  monthSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginHorizontal: 16, marginBottom: 12, backgroundColor: '#fff', borderRadius: 16, paddingVertical: 12 },
+  monthArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  monthArrowDisabled: { opacity: 0.4 },
+  monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827', minWidth: 100, textAlign: 'center' },
   empty: { textAlign: 'center', color: '#9CA3AF', marginTop: 60 },
   item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', marginBottom: 8, padding: 16, borderRadius: 16 },
   itemLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },

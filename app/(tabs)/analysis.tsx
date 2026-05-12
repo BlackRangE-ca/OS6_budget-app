@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
-import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native'
+import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
+import { Ionicons } from '@expo/vector-icons'
 import Svg, { Circle, G, Polyline, Line, Text as SvgText } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
 import { CATEGORY_COLORS } from '../../lib/constants'
@@ -271,7 +272,18 @@ const trendStyles = StyleSheet.create({
   summaryText: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
 })
 
+function getMonthStr(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+function shiftMonth(month: string, delta: number) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return getMonthStr(d)
+}
+
 export default function AnalysisScreen() {
+  const currentMonth = getMonthStr(new Date())
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [topCategory, setTopCategory] = useState('')
   const [topRatio, setTopRatio] = useState(0)
   const [allCategories, setAllCategories] = useState<{ category: string; amount: number; ratio: number }[]>([])
@@ -284,20 +296,15 @@ export default function AnalysisScreen() {
   const [monthTrends, setMonthTrends] = useState<MonthTrend[]>([])
   const [spikedCategories, setSpikedCategories] = useState<{ category: string; diff: number; thisAmt: number; lastAmt: number }[]>([])
 
-  useFocusEffect(useCallback(() => { fetchData() }, []))
+  useFocusEffect(useCallback(() => { fetchData(selectedMonth) }, [selectedMonth]))
 
-  async function fetchData() {
+  async function fetchData(selected: string) {
     const { data: { user } } = await supabase.auth.getUser()
-    const now = new Date()
 
     const months = [2, 1, 0].map(offset => {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
-      const y = d.getFullYear()
-      const m = String(d.getMonth() + 1).padStart(2, '0')
-      return {
-        month: `${y}-${m}`,
-        label: `${d.getMonth() + 1}월`,
-      }
+      const m = shiftMonth(selected, -offset)
+      const label = `${parseInt(m.split('-')[1])}월`
+      return { month: m, label }
     })
 
     const [txResults, { data: budgetData }] = await Promise.all([
@@ -407,7 +414,23 @@ export default function AnalysisScreen() {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>소비 패턴 분석</Text>
-      <Text style={styles.subtitle}>지난달 대비 변화를 확인해요</Text>
+
+      {/* 월 선택기 */}
+      <View style={styles.monthSelector}>
+        <TouchableOpacity style={styles.monthArrow} onPress={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}>
+          <Ionicons name="chevron-back" size={18} color="#374151" />
+        </TouchableOpacity>
+        <Text style={styles.monthLabel}>
+          {selectedMonth.split('-')[0]}년 {parseInt(selectedMonth.split('-')[1])}월
+        </Text>
+        <TouchableOpacity
+          style={[styles.monthArrow, selectedMonth === currentMonth && styles.monthArrowDisabled]}
+          onPress={() => selectedMonth !== currentMonth && setSelectedMonth(shiftMonth(selectedMonth, 1))}
+          disabled={selectedMonth === currentMonth}
+        >
+          <Ionicons name="chevron-forward" size={18} color={selectedMonth === currentMonth ? '#D1D5DB' : '#374151'} />
+        </TouchableOpacity>
+      </View>
 
       {/* 재무 건강 점수 카드 */}
       {score && (
@@ -512,8 +535,11 @@ export default function AnalysisScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F4F8', padding: 16, paddingTop: 60 },
-  title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  subtitle: { fontSize: 13, color: '#9CA3AF', marginBottom: 20 },
+  title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  monthSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: '#fff', borderRadius: 16, paddingVertical: 12, marginBottom: 12 },
+  monthArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  monthArrowDisabled: { opacity: 0.4 },
+  monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827', minWidth: 100, textAlign: 'center' },
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 12 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 16 },
   warningCard: { backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA' },
