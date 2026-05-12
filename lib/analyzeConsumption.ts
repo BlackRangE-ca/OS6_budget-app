@@ -171,60 +171,91 @@ export function analyzeConsumptionType(
 
   const ratio = (cat: string) => (categoryMap[cat] ?? 0) / totalAmount
 
-  // 과소비 카테고리: 예산 대비 초과 or 벤치마크 2배 초과
+  // 과소비 카테고리: 벤치마크 1.8배 초과
   const overSpentCategories = Object.entries(categoryMap)
     .filter(([cat, amt]) => {
       const benchmark = JUNIOR_BENCHMARKS[cat]
       if (!benchmark) return false
-      const myRatio = amt / totalAmount * 100
-      return myRatio > benchmark * 1.8
+      return (amt / totalAmount * 100) > benchmark * 1.8
     })
     .map(([cat]) => cat)
 
-  // 소비 유형 분류 (예산 대비 비율 기준으로 수정)
   const budgetUsedRatio = budget && budget > 0 ? totalAmount / budget : null
 
-  let type = '균형 소비형'
-  let description = '특정 카테고리에 소비가 크게 치우치지 않은 안정적인 소비 패턴입니다.'
-  let advice = '현재 소비 패턴을 유지하되, 목표 저축액을 먼저 설정해보세요.'
+  // 각 조건을 독립적으로 평가
+  const flags = {
+    savings:      ratio('저축') >= 0.3,
+    housing:      ratio('주거') >= 0.4,
+    concentrated: topCategoryRatio >= 0.5,
+    leisure:      ratio('쇼핑') + ratio('문화') >= 0.4,
+    food:         ratio('식비') >= 0.35,
+    telecom:      ratio('통신') >= 0.2,
+    medical:      ratio('의료') >= 0.25,
+    transport:    ratio('교통') >= 0.25,
+    overBudget:   budgetUsedRatio !== null && budgetUsedRatio > 1.1,
+  }
 
-  if (ratio('저축') >= 0.3) {
+  let type: string
+  let description: string
+  let advice: string
+
+  // 중복 조건 조합을 먼저 처리
+  if (flags.savings && flags.housing) {
+    type = '주거비 절약형'
+    description = '주거비 부담이 크지만 저축도 꾸준히 챙기는 알뜰한 패턴이에요.'
+    advice = '주거비를 줄이면 저축 여력이 더 커져요. 월세 재협상이나 관리비 절감을 고려해보세요.'
+  } else if (flags.savings && flags.overBudget) {
+    type = '예산 초과 저축형'
+    description = '저축은 열심히 하지만 전체 지출이 예산을 넘어서고 있어요.'
+    advice = '저축 금액을 예산에 포함해서 계획하면 예산 초과를 막을 수 있어요.'
+  } else if (flags.housing && flags.overBudget) {
+    type = '주거비 과부담형'
+    description = '주거비가 높은 데다 예산까지 초과한 위험한 패턴이에요.'
+    advice = '주거 환경 변경을 검토하거나 다른 항목 지출을 대폭 줄여야 해요.'
+  } else if (flags.leisure && flags.overBudget) {
+    type = '여가 과소비형'
+    description = '쇼핑·문화 지출이 많으면서 예산도 초과하고 있어요.'
+    advice = '여가 예산을 먼저 정해두고 그 안에서만 쓰는 습관을 만들어보세요.'
+  } else if (flags.savings) {
     type = '저축 중심형'
     description = '전체 지출 중 저축 비중이 높아 미래 대비 성향이 강합니다.'
     advice = '저축을 유지하되, 생활비가 지나치게 부족하지 않은지 점검해보세요.'
-  } else if (ratio('주거') >= 0.4) {
+  } else if (flags.housing) {
     type = '주거비 부담형'
     description = '주거비 비중이 높아 다른 소비 여력이 줄어들 수 있습니다.'
     advice = '월세·관리비 등 고정 주거비를 점검하고 예산 비중을 조정해보세요.'
-  } else if (topCategoryRatio >= 0.5) {
+  } else if (flags.concentrated) {
     type = '편중 소비형'
     description = `${topCategory} 지출이 전체 소비의 절반 이상을 차지합니다.`
     advice = `${topCategory} 소비를 20%만 줄여도 월 ${Math.round(topCategoryAmount * 0.2).toLocaleString()}원 절약할 수 있어요.`
-  } else if (ratio('쇼핑') + ratio('문화') >= 0.4) {
+  } else if (flags.leisure) {
     type = '여가·쇼핑 소비형'
     description = '쇼핑과 문화 소비 비중이 높아 선택적 소비가 많은 편입니다.'
     advice = '쇼핑과 문화생활 예산을 미리 정해두면 충동 소비를 줄일 수 있어요.'
-  } else if (ratio('식비') >= 0.35) {
+  } else if (flags.food) {
     type = '식비 집중형'
     description = '식비 비중이 높아 외식이나 배달 소비가 많을 가능성이 있습니다.'
     advice = '외식·배달 횟수를 줄이고 주간 식비 한도를 설정해보세요.'
-  } else if (ratio('통신') >= 0.2) {
+  } else if (flags.telecom) {
     type = '통신비 부담형'
     description = '통신비 비중이 상대적으로 높은 편입니다.'
     advice = '요금제·구독 서비스·부가서비스를 점검해 고정비를 줄여보세요.'
-  } else if (ratio('의료') >= 0.25) {
+  } else if (flags.medical) {
     type = '건강관리 지출형'
     description = '의료 관련 지출 비중이 높은 소비 패턴입니다.'
     advice = '반복적으로 발생하는 의료비가 있다면 월별 예산에 따로 반영해보세요.'
-  } else if (ratio('교통') >= 0.25) {
+  } else if (flags.transport) {
     type = '이동비 부담형'
     description = '교통비 비중이 높아 이동 관련 지출이 많은 편입니다.'
     advice = '대중교통 정기권, 이동 경로 조정 등으로 교통비를 관리해보세요.'
-  } else if (budgetUsedRatio !== null && budgetUsedRatio > 1.1) {
-    // 과소비 기준: 고정 금액 아닌 예산 대비 110% 초과
+  } else if (flags.overBudget) {
     type = '과소비 위험형'
-    description = `이번달 예산의 ${Math.round(budgetUsedRatio * 100)}%를 사용했습니다.`
+    description = `이번달 예산의 ${Math.round(budgetUsedRatio! * 100)}%를 사용했습니다.`
     advice = '카테고리별 한도를 설정하고 주간 단위로 소비를 점검하는 것이 좋아요.'
+  } else {
+    type = '균형 소비형'
+    description = '특정 카테고리에 소비가 크게 치우치지 않은 안정적인 소비 패턴입니다.'
+    advice = '현재 소비 패턴을 유지하되, 목표 저축액을 먼저 설정해보세요.'
   }
 
   const score = calculateFinancialScore(
