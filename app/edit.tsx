@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
-import { Ionicons } from '@expo/vector-icons'
-import { supabase } from '../../lib/supabase'
-import { Category, TransactionType } from '../../types'
+import { useRoute, useNavigation } from '@react-navigation/native'
+import { supabase } from '../lib/supabase'
+import { Category, TransactionType, Transaction } from '../types'
 
-const CATEGORIES: Category[] = ['식비', '교통', '주거', '통신', '의료', '문화', '쇼핑', '저축', '기타', '수입']
+const CATEGORIES: Category[] = ['식비', '교통', '주거', '통신', '의료', '문화', '쇼핑', '저축', '기타']
 
 function formatNumber(value: string) {
   const num = value.replace(/[^0-9]/g, '')
@@ -16,13 +15,15 @@ function parseNumber(value: string) {
   return value.replace(/,/g, '')
 }
 
-export default function AddScreen() {
+export default function EditScreen() {
+  const route = useRoute() as any
   const navigation = useNavigation()
-  const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState<Category>('식비')
-  const [type, setType] = useState<TransactionType>('variable')
-  const [memo, setMemo] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const tx: Transaction = route.params.transaction
+
+  const [amount, setAmount] = useState(tx.amount.toLocaleString())
+  const [category, setCategory] = useState<Category>(tx.category)
+  const [type, setType] = useState<TransactionType>(tx.type)
+  const [memo, setMemo] = useState(tx.memo ?? '')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit() {
@@ -33,42 +34,28 @@ export default function AddScreen() {
     }
 
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-
-    const { error } = await supabase.from('transactions').insert({
-      user_id: user!.id,
-      amount: Number(rawAmount),
-      category,
-      type,
-      memo,
-      date,
-    })
+    const { error } = await supabase
+      .from('transactions')
+      .update({ amount: Number(rawAmount), category, type, memo })
+      .eq('id', tx.id)
 
     if (error) {
-      Alert.alert('오류', '저장에 실패했습니다.')
+      Alert.alert('오류', '수정에 실패했습니다.')
     } else {
-      Alert.alert('완료', '지출이 저장됐습니다.')
-      setAmount('')
-      setMemo('')
-      setCategory('식비')
-      setType('variable')
+      Alert.alert('완료', '수정됐습니다.', [
+        { text: '확인', onPress: () => navigation.goBack() },
+      ])
     }
     setLoading(false)
   }
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>지출 추가</Text>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
-          <Ionicons name="close" size={22} color="#6B7280" />
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.title}>지출 수정</Text>
 
       <Text style={styles.label}>금액</Text>
       <TextInput
         style={styles.input}
-        placeholder="0"
         value={amount}
         onChangeText={(v) => setAmount(formatNumber(v))}
         keyboardType="numeric"
@@ -88,12 +75,6 @@ export default function AddScreen() {
         >
           <Text style={[styles.typeText, type === 'fixed' && styles.typeTextActive]}>고정지출</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.typeButton, type === 'income' && styles.typeIncomeActive]}
-          onPress={() => { setType('income'); setCategory('수입') }}
-        >
-          <Text style={[styles.typeText, type === 'income' && styles.typeTextActive]}>수입</Text>
-        </TouchableOpacity>
       </View>
 
       <Text style={styles.label}>카테고리</Text>
@@ -109,15 +90,6 @@ export default function AddScreen() {
         ))}
       </View>
 
-      <Text style={styles.label}>날짜</Text>
-      <TextInput
-        style={styles.input}
-        value={date}
-        onChangeText={setDate}
-        placeholder="YYYY-MM-DD"
-        maxLength={10}
-      />
-
       <Text style={styles.label}>메모 (선택)</Text>
       <TextInput
         style={styles.input}
@@ -127,23 +99,24 @@ export default function AddScreen() {
       />
 
       <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? '저장 중...' : '저장하기'}</Text>
+        <Text style={styles.buttonText}>{loading ? '저장 중...' : '수정하기'}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
+        <Text style={styles.cancelText}>취소</Text>
       </TouchableOpacity>
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#F2F4F8' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 60, marginBottom: 24 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, padding: 24, backgroundColor: '#f8f8ff' },
+  title: { fontSize: 24, fontWeight: 'bold', marginTop: 60, marginBottom: 24, color: '#1a1a2e' },
   label: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 8, marginTop: 16 },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 14, fontSize: 16, backgroundColor: '#fff' },
   row: { flexDirection: 'row', gap: 10 },
   typeButton: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fff' },
-  typeActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  typeIncomeActive: { backgroundColor: '#16A34A', borderColor: '#16A34A' },
+  typeActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
   typeText: { color: '#555', fontWeight: '500' },
   typeTextActive: { color: '#fff' },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -151,6 +124,8 @@ const styles = StyleSheet.create({
   categoryActive: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
   categoryText: { color: '#555', fontSize: 13 },
   categoryTextActive: { color: '#fff' },
-  button: { backgroundColor: '#4f46e5', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 32, marginBottom: 40 },
+  button: { backgroundColor: '#4f46e5', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 32 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  cancelButton: { padding: 16, alignItems: 'center', marginTop: 12, marginBottom: 40 },
+  cancelText: { color: '#aaa', fontSize: 15 },
 })
