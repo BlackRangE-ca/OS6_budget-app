@@ -17,38 +17,13 @@ import { fetchKeyStatistics } from '../../lib/economyApi'
 
 type CategoryType = 'policy' | 'finance' | 'economy'
 
-const defaultFinancePrograms = [
-   {
-    id: 'finance-1',
-    title: '정기예금 상품',
-    category: '금융상품',
-    target: '사회초년생 및 청년',
-    summary: '금감원 금융상품 API를 통해 정기예금 정보를 제공할 예정입니다.',
-    condition: '상품별 가입 조건 확인 필요',
-    benefit: '금리, 가입기간, 우대조건 비교 가능',
-    link: 'https://finlife.fss.or.kr',
-  },
-]
-
-const economyProgramsDefault = [
-  {
-    id: 'economy-1',
-    title: '경제지표 정보',
-    category: '경제지표',
-    target: '투자 및 자산관리에 관심 있는 사용자',
-    summary: '한국은행 경제통계 API를 통해 기준금리, 물가, 환율 등 주요 경제지표를 제공합니다.',
-    condition: '한국은행 ECOS API 연동 필요',
-    benefit: '경제 흐름을 참고한 자산관리 판단 가능',
-    link: 'https://ecos.bok.or.kr',
-  },
-]
 
 export default function SupportScreen({ navigation }: any) {
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('policy')
   const [policyPrograms, setPolicyPrograms] = useState<any[]>([])
-  const [financePrograms, setFinancePrograms] = useState<any[]>(defaultFinancePrograms)
+  const [financePrograms, setFinancePrograms] = useState<any[]>([])
   const [savingPrograms, setSavingPrograms] = useState<any[]>([])
-  const [economyPrograms, setEconomyPrograms] = useState<any[]>(economyProgramsDefault)
+  const [economyPrograms, setEconomyPrograms] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
