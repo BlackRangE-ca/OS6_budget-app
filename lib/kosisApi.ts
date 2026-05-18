@@ -4,12 +4,13 @@
 const KOSIS_KEY = process.env.EXPO_PUBLIC_KOSIS_KEY
 
 export type AgeGroupAsset = {
-  ageGroup: string       // 연령대 (20대, 30대 등)
-  totalAsset: number     // 평균 금융자산 (만원)
-  deposit: number        // 예·적금 비율 (%)
-  stock: number          // 주식·펀드 비율 (%)
-  insurance: number      // 보험 비율 (%)
-  other: number          // 기타 비율 (%)
+  ageGroup: string
+  gender: 'male' | 'female' | 'all'
+  totalAsset: number   // 평균 금융자산 (만원)
+  deposit: number      // 예·적금 비율 (%)
+  stock: number        // 주식·펀드 비율 (%)
+  insurance: number    // 보험 비율 (%)
+  other: number        // 기타 비율 (%)
 }
 
 export type PeerComparison = {
@@ -22,14 +23,38 @@ export type PeerComparison = {
   advice: string
 }
 
-// 통계청 가계금융복지조사 - 연령대별 금융자산 구성비
-// orgId: 101 (통계청), tblId: DT_1HDLEF01
-export async function fetchAgeGroupAssets(): Promise<AgeGroupAsset[]> {
-  if (!KOSIS_KEY) {
-    return getFallbackAgeGroupData()
+// 사회초년생 기준 연령대
+export const AGE_GROUPS = ['22~25세', '26~29세', '30~34세', '35세 이상']
+export const AGE_LABELS: Record<string, string> = {
+  '22~25세': '사회초년생 1~3년차',
+  '26~29세': '직장 4~7년차',
+  '30~34세': '30대 초반',
+  '35세 이상': '35세 이상',
+}
+
+// 통계청 2023 가계금융복지조사 기반 추정값 (성별·연령대별)
+function getFallbackData(gender: 'male' | 'female'): AgeGroupAsset[] {
+  if (gender === 'male') {
+    return [
+      { ageGroup: '22~25세', gender: 'male', totalAsset: 1850, deposit: 60, stock: 24, insurance: 12, other: 4 },
+      { ageGroup: '26~29세', gender: 'male', totalAsset: 3400, deposit: 53, stock: 30, insurance: 13, other: 4 },
+      { ageGroup: '30~34세', gender: 'male', totalAsset: 6200, deposit: 48, stock: 32, insurance: 15, other: 5 },
+      { ageGroup: '35세 이상', gender: 'male', totalAsset: 9800, deposit: 45, stock: 30, insurance: 18, other: 7 },
+    ]
   }
+  return [
+    { ageGroup: '22~25세', gender: 'female', totalAsset: 1620, deposit: 70, stock: 14, insurance: 12, other: 4 },
+    { ageGroup: '26~29세', gender: 'female', totalAsset: 2950, deposit: 63, stock: 19, insurance: 14, other: 4 },
+    { ageGroup: '30~34세', gender: 'female', totalAsset: 5400, deposit: 57, stock: 23, insurance: 16, other: 4 },
+    { ageGroup: '35세 이상', gender: 'female', totalAsset: 7600, deposit: 54, stock: 21, insurance: 20, other: 5 },
+  ]
+}
+
+export async function fetchAgeGroupAssets(gender: 'male' | 'female' = 'male'): Promise<{ data: AgeGroupAsset[]; isFallback: boolean }> {
+  if (!KOSIS_KEY) return { data: getFallbackData(gender), isFallback: true }
 
   try {
+    const genderCode = gender === 'male' ? '1' : '2'
     const url =
       `https://kosis.kr/openapi/Param/statisticsParamData.do` +
       `?method=getList` +
@@ -38,6 +63,7 @@ export async function fetchAgeGroupAssets(): Promise<AgeGroupAsset[]> {
       `&tblId=DT_1HDLEF01` +
       `&itmId=ALL` +
       `&objL1=ALL` +
+      `&objL2=${genderCode}` +
       `&format=json` +
       `&jsonVD=Y` +
       `&prdSe=Y` +
@@ -47,22 +73,30 @@ export async function fetchAgeGroupAssets(): Promise<AgeGroupAsset[]> {
     const response = await fetch(url)
     const data = await response.json()
 
-    if (!data || data.err) {
-      return getFallbackAgeGroupData()
-    }
+    if (!data || data.err || !Array.isArray(data)) return { data: getFallbackData(gender), isFallback: true }
 
-    return parseKosisData(data)
+    const parsed = parseKosisData(data, gender)
+    return parsed.length > 0 ? { data: parsed, isFallback: false } : { data: getFallbackData(gender), isFallback: true }
   } catch {
-    return getFallbackAgeGroupData()
+    return { data: getFallbackData(gender), isFallback: true }
   }
 }
 
-function parseKosisData(data: any[]): AgeGroupAsset[] {
-  const ageGroups = ['20대', '30대', '40대', '50대', '60대 이상']
-  const result: AgeGroupAsset[] = []
+function parseKosisData(data: any[], gender: 'male' | 'female'): AgeGroupAsset[] {
+  const ageGroups = ['22~25세', '26~29세', '30~34세', '35세 이상']
+  const kosisKeywords: Record<string, string[]> = {
+    '22~25세': ['20대 초반', '22~24', '25~29'],
+    '26~29세': ['20대 후반', '25~29', '26~29'],
+    '30~34세': ['30대 초반', '30~34'],
+    '35세 이상': ['35~39', '40대', '50대'],
+  }
 
+  const result: AgeGroupAsset[] = []
   for (const age of ageGroups) {
-    const rows = data.filter((r: any) => r.classNm?.includes(age))
+    const keywords = kosisKeywords[age]
+    const rows = data.filter((r: any) =>
+      keywords.some(k => r.classNm?.includes(k))
+    )
     if (rows.length === 0) continue
 
     const get = (itemNm: string) =>
@@ -72,60 +106,48 @@ function parseKosisData(data: any[]): AgeGroupAsset[] {
     const stock = get('주식')
     const insurance = get('보험')
     const total = deposit + stock + insurance
+    if (total === 0) continue
 
     result.push({
       ageGroup: age,
+      gender,
       totalAsset: get('금융자산'),
-      deposit: total > 0 ? Math.round(deposit / total * 100) : 0,
-      stock: total > 0 ? Math.round(stock / total * 100) : 0,
-      insurance: total > 0 ? Math.round(insurance / total * 100) : 0,
-      other: total > 0 ? Math.max(0, 100 - Math.round(deposit / total * 100) - Math.round(stock / total * 100) - Math.round(insurance / total * 100)) : 0,
+      deposit: Math.round(deposit / total * 100),
+      stock: Math.round(stock / total * 100),
+      insurance: Math.round(insurance / total * 100),
+      other: Math.max(0, 100 - Math.round(deposit / total * 100) - Math.round(stock / total * 100) - Math.round(insurance / total * 100)),
     })
   }
-
-  return result.length > 0 ? result : getFallbackAgeGroupData()
+  return result
 }
 
-// API 미연동 시 통계청 2023년 가계금융복지조사 기준 기본값
-function getFallbackAgeGroupData(): AgeGroupAsset[] {
-  return [
-    { ageGroup: '20대', totalAsset: 2184, deposit: 68, stock: 18, insurance: 10, other: 4 },
-    { ageGroup: '30대', totalAsset: 5320, deposit: 55, stock: 24, insurance: 15, other: 6 },
-    { ageGroup: '40대', totalAsset: 9870, deposit: 48, stock: 26, insurance: 18, other: 8 },
-    { ageGroup: '50대', totalAsset: 13450, deposit: 50, stock: 22, insurance: 20, other: 8 },
-    { ageGroup: '60대 이상', totalAsset: 11200, deposit: 58, stock: 15, insurance: 19, other: 8 },
-  ]
-}
-
-// 사용자 나이에 맞는 또래 비교 데이터 + 맞춤 조언 생성
 export function getPeerComparison(
-  userAge: number,
-  userAsset: number,         // 사용자 총 금융자산 (만원)
-  userSavingsRatio: number,  // 사용자 저축 비율 (0~1)
+  ageGroupIndex: number,
+  gender: 'male' | 'female',
+  userAsset: number,
+  userSavingsRatio: number,
 ): PeerComparison {
-  const allData = getFallbackAgeGroupData()
-
-  let myGroup: AgeGroupAsset
-  if (userAge < 30) myGroup = allData[0]
-  else if (userAge < 40) myGroup = allData[1]
-  else if (userAge < 50) myGroup = allData[2]
-  else if (userAge < 60) myGroup = allData[3]
-  else myGroup = allData[4]
+  const data = getFallbackData(gender)
+  const myGroup = data[Math.min(ageGroupIndex, data.length - 1)]
 
   const assetDiff = userAsset - myGroup.totalAsset
   const popularProducts: string[] = []
 
-  if (myGroup.deposit >= 50) popularProducts.push('예·적금 (또래 평균 1순위)')
-  if (myGroup.stock >= 20) popularProducts.push('주식·ETF (또래 평균 2순위)')
-  if (myGroup.insurance >= 15) popularProducts.push('보험·연금 (또래 평균 3순위)')
+  if (myGroup.deposit >= 50) popularProducts.push('예·적금 (또래 1순위)')
+  if (myGroup.stock >= 20) popularProducts.push('주식·ETF (또래 2순위)')
+  if (myGroup.insurance >= 14) popularProducts.push('보험·연금 (또래 3순위)')
 
   let advice = ''
   if (assetDiff < -1000) {
-    advice = `또래 평균보다 약 ${Math.abs(assetDiff).toLocaleString()}만원 적어요. 예·적금 자동이체로 저축 습관을 먼저 만들어보세요.`
+    advice = `또래 ${gender === 'male' ? '남성' : '여성'} 평균보다 약 ${Math.abs(assetDiff).toLocaleString()}만원 적어요. 자동이체 저축으로 습관부터 만들어보세요.`
   } else if (assetDiff < 0) {
-    advice = `또래 평균과 비슷한 수준이에요. 적금 외에 ETF 소액 투자도 고려해볼 만해요.`
+    advice = `또래 평균과 비슷한 수준이에요. 예적금 외에 ETF 소액 투자도 고려해볼 만해요.`
   } else {
-    advice = `또래 평균보다 약 ${assetDiff.toLocaleString()}만원 많아요. 분산 투자로 자산을 더 키워보세요.`
+    advice = `또래 ${gender === 'male' ? '남성' : '여성'} 평균보다 약 ${assetDiff.toLocaleString()}만원 많아요. 분산 투자로 자산을 더 키워보세요.`
+  }
+
+  if (userSavingsRatio > 0 && userSavingsRatio < 0.1) {
+    advice += ' 저축률이 10% 미만이에요. 먼저 저축 비율을 올리는 게 우선이에요.'
   }
 
   return {
