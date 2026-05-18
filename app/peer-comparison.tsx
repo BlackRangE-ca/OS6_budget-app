@@ -17,7 +17,10 @@ export default function PeerComparisonScreen() {
   const [etfs, setEtfs] = useState<ETFProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [peerFallback, setPeerFallback] = useState(false)
+  const [peerFallbackReason, setPeerFallbackReason] = useState<'no_key' | 'error' | undefined>()
   const [etfFallback, setEtfFallback] = useState(false)
+  const [etfFallbackReason, setEtfFallbackReason] = useState<'no_key' | 'error' | undefined>()
+  const [myAssetComp, setMyAssetComp] = useState<{ depositTotal: number; stock: number; insurance: number; other: number } | null>(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -32,30 +35,51 @@ export default function PeerComparisonScreen() {
     const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-    const [{ data: allTx }, { data: budgetData }, { data: monthTx }, ageGroupResult, etfResult] =
+    const [{ data: allTx }, { data: budgetData }, { data: monthTx }, { data: userAssets }, ageGroupResult, etfResult] =
       await Promise.all([
         supabase.from('transactions').select('amount, category').eq('user_id', user!.id).eq('category', '저축'),
         supabase.from('budgets').select('salary').eq('user_id', user!.id).eq('month', thisMonth).single(),
         supabase.from('transactions').select('amount, category').eq('user_id', user!.id)
           .gte('date', `${thisMonth}-01`).lt('date', `${nextMonth}-01`),
+        supabase.from('user_assets').select('deposit,savings,stock,insurance,other').eq('user_id', user!.id).single(),
         fetchAgeGroupAssets(gender),
         fetchTopETFs(),
       ])
 
-    const totalSavings = (allTx ?? []).reduce((s, t) => s + t.amount, 0)
-    const savingsManwon = Math.round(totalSavings / 10000)
-    setMySavings(savingsManwon)
-    setMyAssetInput(String(savingsManwon))
+    // user_assets 총합이 있으면 우선 사용, 없으면 저축 거래내역 합계로 추정
+    const assetTotal = userAssets
+      ? ((userAssets.deposit ?? 0) + (userAssets.stock ?? 0) + (userAssets.insurance ?? 0) + (userAssets.other ?? 0))
+      : 0
+    const savingsTotal = (allTx ?? []).reduce((s, t) => s + t.amount, 0)
+    const baseAmount = assetTotal > 0 ? assetTotal : savingsTotal
+    const baseManwon = Math.round(baseAmount / 10000)
+    setMySavings(baseManwon)
+    setMyAssetInput(String(baseManwon))
 
     if (budgetData?.salary && monthTx) {
       const ms = monthTx.filter(t => t.category === '저축').reduce((s, t) => s + t.amount, 0)
       setMySavingsRatio(ms / budgetData.salary)
     }
 
+    if (userAssets) {
+      const depositTotal = (userAssets.deposit ?? 0) + (userAssets.savings ?? 0)
+      const t = depositTotal + (userAssets.stock ?? 0) + (userAssets.insurance ?? 0) + (userAssets.other ?? 0)
+      if (t > 0) {
+        setMyAssetComp({
+          depositTotal: Math.round(depositTotal / t * 100),
+          stock:        Math.round((userAssets.stock     ?? 0) / t * 100),
+          insurance:    Math.round((userAssets.insurance ?? 0) / t * 100),
+          other:        Math.round((userAssets.other     ?? 0) / t * 100),
+        })
+      }
+    }
+
     setAgeData(ageGroupResult.data)
     setPeerFallback(ageGroupResult.isFallback)
+    setPeerFallbackReason(ageGroupResult.fallbackReason)
     setEtfs(etfResult.data)
     setEtfFallback(etfResult.isFallback)
+    setEtfFallbackReason(etfResult.fallbackReason)
     setLoading(false)
   }
 
@@ -63,6 +87,7 @@ export default function PeerComparisonScreen() {
     const result = await fetchAgeGroupAssets(gender)
     setAgeData(result.data)
     setPeerFallback(result.isFallback)
+    setPeerFallbackReason(result.fallbackReason)
   }
 
   const myAsset = parseInt(myAssetInput.replace(/,/g, ''), 10) || mySavings
@@ -149,8 +174,10 @@ export default function PeerComparisonScreen() {
               </Text>
               {peerFallback && (
                 <View style={styles.fallbackBanner}>
-                  <Ionicons name="warning-outline" size={13} color="#D97706" />
-                  <Text style={styles.fallbackText}>서버 연결 실패 · 참고값으로 표시 중</Text>
+                  <Ionicons name="construct-outline" size={13} color="#D97706" />
+                  <Text style={styles.fallbackText}>
+                    API 연동 작업 중 · 통계청 2023 가계금융복지조사 기준값으로 표시
+                  </Text>
                 </View>
               )}
 
@@ -186,48 +213,122 @@ export default function PeerComparisonScreen() {
             </View>
           )}
 
-          {/* 자산 구성 비율 */}
+          {/* 자산 구성 비교 */}
           {currentAgeData && (
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>또래 평균 자산 구성</Text>
-              {[
-                { label: '예·적금', value: currentAgeData.deposit, color: '#2563EB' },
-                { label: '주식·펀드', value: currentAgeData.stock, color: '#7C3AED' },
-                { label: '보험·연금', value: currentAgeData.insurance, color: '#059669' },
-                { label: '기타', value: currentAgeData.other, color: '#D97706' },
-              ].map(item => (
-                <View key={item.label} style={styles.barRow}>
-                  <Text style={styles.barLabel}>{item.label}</Text>
-                  <View style={styles.barBg}>
-                    <View style={[styles.barFill, { width: `${item.value}%` as any, backgroundColor: item.color }]} />
-                  </View>
-                  <Text style={styles.barPct}>{item.value}%</Text>
+              <Text style={styles.sectionTitle}>자산 구성 비교</Text>
+              <Text style={styles.hint}>
+                {myAssetComp ? '내 구성 vs 또래 평균' : '또래 평균 구성 (자산 탭에서 내 자산 입력 시 비교 가능)'}
+              </Text>
+
+              {/* 헤더 — 데이터 행과 동일한 구조로 정렬 보장 */}
+              <View style={[styles.compRow, { marginBottom: 4 }]}>
+                <View style={[styles.compDot, { backgroundColor: 'transparent' }]} />
+                <Text style={[styles.compLabel, { color: 'transparent' }]}>placeholder</Text>
+                <View style={[styles.compBarGroup, { alignItems: 'center' }]}>
+                  <Text style={styles.compColHead}>나</Text>
                 </View>
-              ))}
+                <View style={[styles.compBarGroup, { alignItems: 'center' }]}>
+                  <Text style={styles.compColHead}>또래</Text>
+                </View>
+                <View style={{ width: 34 }} />
+              </View>
+
+              {[
+                { label: '예·적금',   myPct: myAssetComp?.depositTotal, peerPct: currentAgeData.deposit,   color: '#2563EB' },
+                { label: '주식·ETF',  myPct: myAssetComp?.stock,     peerPct: currentAgeData.stock,     color: '#7C3AED' },
+                { label: '보험·연금', myPct: myAssetComp?.insurance,  peerPct: currentAgeData.insurance, color: '#16A34A' },
+                { label: '기타',      myPct: myAssetComp?.other,      peerPct: currentAgeData.other,     color: '#D97706' },
+              ].map(({ label, myPct, peerPct, color }) => {
+                const diff = myPct != null ? myPct - peerPct : null
+                return (
+                  <View key={label} style={styles.compRow}>
+                    <View style={[styles.compDot, { backgroundColor: color }]} />
+                    <Text style={styles.compLabel}>{label}</Text>
+
+                    <View style={styles.compBarGroup}>
+                      {myPct != null ? (
+                        <>
+                          <View style={styles.compBarBg}>
+                            <View style={[styles.compBarFill, { width: `${myPct}%` as any, backgroundColor: color }]} />
+                          </View>
+                          <Text style={styles.compPct}>{myPct}%</Text>
+                        </>
+                      ) : (
+                        <Text style={styles.compPctEmpty}>-</Text>
+                      )}
+                    </View>
+
+                    <View style={styles.compBarGroup}>
+                      <View style={styles.compBarBg}>
+                        <View style={[styles.compBarFill, { width: `${peerPct}%` as any, backgroundColor: color + '55' }]} />
+                      </View>
+                      <Text style={styles.compPct}>{peerPct}%</Text>
+                    </View>
+
+                    <Text style={[styles.compDiff, {
+                      color: diff == null ? 'transparent' : Math.abs(diff) <= 5 ? '#9CA3AF' : diff > 0 ? '#2563EB' : '#EF4444'
+                    }]}>
+                      {diff != null ? `${diff > 0 ? '+' : ''}${diff}%` : ''}
+                    </Text>
+                  </View>
+                )
+              })}
             </View>
           )}
 
           {/* 맞춤 조언 */}
-          {peerData && (
-            <View style={[styles.card, styles.adviceCard]}>
-              <View style={styles.adviceHeader}>
-                <Ionicons name="bulb-outline" size={20} color="#2563EB" />
-                <Text style={styles.adviceTitle}>맞춤 조언</Text>
+          {peerData && currentAgeData && (() => {
+            const tips: string[] = []
+
+            // 총 자산 조언
+            tips.push(peerData.advice)
+
+            // 구성 비율 조언 (myAssetComp 있을 때만)
+            if (myAssetComp) {
+              const depDiff  = myAssetComp.depositTotal - currentAgeData.deposit
+              const stDiff   = myAssetComp.stock        - currentAgeData.stock
+              const insDiff  = myAssetComp.insurance    - currentAgeData.insurance
+
+              if (depDiff > 10)
+                tips.push(`예·적금 비중이 또래보다 ${depDiff}% 높아요. 주식·ETF 비율을 조금씩 늘려볼 만해요.`)
+              else if (depDiff < -10)
+                tips.push(`예·적금 비중이 또래보다 ${Math.abs(depDiff)}% 낮아요. 비상금성 예·적금을 먼저 확보하세요.`)
+
+              if (stDiff < -10)
+                tips.push(`주식·ETF 비중이 또래보다 ${Math.abs(stDiff)}% 낮아요. 소액 ETF 투자로 시작해볼 수 있어요.`)
+              else if (stDiff > 15)
+                tips.push(`주식·ETF 비중이 또래보다 ${stDiff}% 높아요. 안전자산도 함께 유지하는 게 좋아요.`)
+
+              if (insDiff < -5)
+                tips.push(`보험·연금 비중이 또래보다 낮아요. 실손보험·연금저축부터 챙겨보세요.`)
+            }
+
+            return (
+              <View style={[styles.card, styles.adviceCard]}>
+                <View style={styles.adviceHeader}>
+                  <Ionicons name="bulb-outline" size={20} color="#2563EB" />
+                  <Text style={styles.adviceTitle}>맞춤 조언</Text>
+                </View>
+                {tips.map((t, i) => (
+                  <View key={i} style={i > 0 ? { marginTop: 8 } : {}}>
+                    <Text style={styles.adviceText}>{t}</Text>
+                  </View>
+                ))}
+                {peerData.popularProducts.length > 0 && (
+                  <>
+                    <Text style={styles.popularTitle}>또래가 많이 투자하는 자산</Text>
+                    {peerData.popularProducts.map((p, i) => (
+                      <View key={i} style={styles.popularItem}>
+                        <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
+                        <Text style={styles.popularText}>{p}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
               </View>
-              <Text style={styles.adviceText}>{peerData.advice}</Text>
-              {peerData.popularProducts.length > 0 && (
-                <>
-                  <Text style={styles.popularTitle}>또래가 많이 투자하는 자산</Text>
-                  {peerData.popularProducts.map((p, i) => (
-                    <View key={i} style={styles.popularItem}>
-                      <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
-                      <Text style={styles.popularText}>{p}</Text>
-                    </View>
-                  ))}
-                </>
-              )}
-            </View>
-          )}
+            )
+          })()}
 
           {/* 인기 ETF */}
           {etfs.length > 0 && (
@@ -236,8 +337,10 @@ export default function PeerComparisonScreen() {
               <Text style={styles.hint}>KRX 데이터 기준</Text>
               {etfFallback && (
                 <View style={styles.fallbackBanner}>
-                  <Ionicons name="warning-outline" size={13} color="#D97706" />
-                  <Text style={styles.fallbackText}>서버 연결 실패 · 참고값으로 표시 중</Text>
+                  <Ionicons name="construct-outline" size={13} color="#D97706" />
+                  <Text style={styles.fallbackText}>
+                    API 연동 작업 중 · KRX 순자산 상위 ETF 기준값으로 표시
+                  </Text>
                 </View>
               )}
               {etfs.slice(0, 5).map(etf => (
@@ -315,4 +418,15 @@ const styles = StyleSheet.create({
   etfRight: { alignItems: 'flex-end' },
   etfPrice: { fontSize: 14, fontWeight: '600', color: '#111827' },
   etfChange: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+
+  compColHead: { fontSize: 11, fontWeight: '700', color: '#9CA3AF' },
+  compRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  compDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  compLabel: { fontSize: 12, fontWeight: '600', color: '#374151', width: 54, flexShrink: 0 },
+  compBarGroup: { flex: 1, gap: 2 },
+  compBarBg: { height: 7, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden' },
+  compBarFill: { height: 7, borderRadius: 4 },
+  compPct: { fontSize: 10, color: '#6B7280', alignSelf: 'flex-end' },
+  compPctEmpty: { fontSize: 10, color: '#D1D5DB' },
+  compDiff: { fontSize: 11, fontWeight: '700', width: 34, textAlign: 'right', flexShrink: 0 },
 })

@@ -22,8 +22,8 @@ const FALLBACK_ETFS: ETFProduct[] = [
   { id: 'A148070', name: 'KOSEF 국고채10년', price: 11320, aum: 5430, change: 0.0, category: '채권' },
 ]
 
-export async function fetchTopETFs(): Promise<{ data: ETFProduct[]; isFallback: boolean }> {
-  if (!KRX_KEY) return { data: FALLBACK_ETFS, isFallback: true }
+export async function fetchTopETFs(): Promise<{ data: ETFProduct[]; isFallback: boolean; fallbackReason?: 'no_key' | 'error' }> {
+  if (!KRX_KEY) return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'no_key' }
 
   try {
     const otpRes = await fetch(
@@ -31,7 +31,10 @@ export async function fetchTopETFs(): Promise<{ data: ETFProduct[]; isFallback: 
       `?bld=dbms/MDC/STAT/standard/MDCSTAT04301&locale=ko_KR&auth=${KRX_KEY}`
     )
     const otp = await otpRes.text()
-    if (!otp || otp.length < 10) return { data: FALLBACK_ETFS, isFallback: true }
+    if (!otp || otp.length < 10 || otp.trimStart().startsWith('<')) {
+      console.error('[KRX] OTP error — IP 미등록이거나 키 오류. preview:', otp?.slice(0, 120))
+      return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'error' }
+    }
 
     const dataRes = await fetch(
       'https://openapi.krx.co.kr/contents/MDC/STAT/standard/MDCSTAT04301',
@@ -41,10 +44,18 @@ export async function fetchTopETFs(): Promise<{ data: ETFProduct[]; isFallback: 
         body: `code=${otp}`,
       }
     )
-    const data = await dataRes.json()
+    const rawText = await dataRes.text()
+    if (rawText.trimStart().startsWith('<')) {
+      console.error('[KRX] data response is HTML, not JSON')
+      return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'error' }
+    }
+    const data = JSON.parse(rawText)
     const rows: any[] = data?.output ?? []
 
-    if (rows.length === 0) return { data: FALLBACK_ETFS, isFallback: true }
+    if (rows.length === 0) {
+      console.error('[KRX] empty output:', JSON.stringify(data)?.slice(0, 300))
+      return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'error' }
+    }
 
     return {
       data: rows
@@ -60,7 +71,8 @@ export async function fetchTopETFs(): Promise<{ data: ETFProduct[]; isFallback: 
         })),
       isFallback: false,
     }
-  } catch {
-    return { data: FALLBACK_ETFS, isFallback: true }
+  } catch (e) {
+    console.error('[KRX] fetch error:', e)
+    return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'error' }
   }
 }

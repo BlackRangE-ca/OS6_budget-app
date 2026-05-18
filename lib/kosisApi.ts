@@ -50,35 +50,43 @@ function getFallbackData(gender: 'male' | 'female'): AgeGroupAsset[] {
   ]
 }
 
-export async function fetchAgeGroupAssets(gender: 'male' | 'female' = 'male'): Promise<{ data: AgeGroupAsset[]; isFallback: boolean }> {
-  if (!KOSIS_KEY) return { data: getFallbackData(gender), isFallback: true }
+export async function fetchAgeGroupAssets(gender: 'male' | 'female' = 'male'): Promise<{ data: AgeGroupAsset[]; isFallback: boolean; fallbackReason?: 'no_key' | 'error' }> {
+  if (!KOSIS_KEY) return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'no_key' }
+
+  const KOSIS_STATS_ID = process.env.EXPO_PUBLIC_KOSIS_STATS_ID
+  if (!KOSIS_STATS_ID) return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'no_key' }
 
   try {
-    const genderCode = gender === 'male' ? '1' : '2'
     const url =
-      `https://kosis.kr/openapi/Param/statisticsParamData.do` +
+      `https://kosis.kr/openapi/statisticsData.do` +
       `?method=getList` +
       `&apiKey=${KOSIS_KEY}` +
-      `&orgId=101` +
-      `&tblId=DT_1HDLEF01` +
-      `&itmId=ALL` +
-      `&objL1=ALL` +
-      `&objL2=${genderCode}` +
-      `&format=json` +
-      `&jsonVD=Y` +
+      `&userStatsId=${KOSIS_STATS_ID}` +
       `&prdSe=Y` +
       `&startPrdDe=2023` +
-      `&endPrdDe=2023`
+      `&endPrdDe=2023` +
+      `&format=json` +
+      `&jsonVD=Y`
 
     const response = await fetch(url)
-    const data = await response.json()
+    const rawText = await response.text()
+    if (rawText.trimStart().startsWith('<')) {
+      console.error('[KOSIS] HTML response — 키 오류 또는 파라미터 문제. preview:', rawText.slice(0, 120))
+      return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'error' }
+    }
+    const data = JSON.parse(rawText)
 
-    if (!data || data.err || !Array.isArray(data)) return { data: getFallbackData(gender), isFallback: true }
+    if (!data || data.err || !Array.isArray(data)) {
+      console.error('[KOSIS] unexpected response:', JSON.stringify(data)?.slice(0, 300))
+      return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'error' }
+    }
 
     const parsed = parseKosisData(data, gender)
-    return parsed.length > 0 ? { data: parsed, isFallback: false } : { data: getFallbackData(gender), isFallback: true }
-  } catch {
-    return { data: getFallbackData(gender), isFallback: true }
+    if (parsed.length === 0) console.error('[KOSIS] parseKosisData returned empty — raw row count:', data.length)
+    return parsed.length > 0 ? { data: parsed, isFallback: false } : { data: getFallbackData(gender), isFallback: true, fallbackReason: 'error' }
+  } catch (e) {
+    console.error('[KOSIS] fetch error:', e)
+    return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'error' }
   }
 }
 
@@ -144,10 +152,6 @@ export function getPeerComparison(
     advice = `또래 평균과 비슷한 수준이에요. 예적금 외에 ETF 소액 투자도 고려해볼 만해요.`
   } else {
     advice = `또래 ${gender === 'male' ? '남성' : '여성'} 평균보다 약 ${assetDiff.toLocaleString()}만원 많아요. 분산 투자로 자산을 더 키워보세요.`
-  }
-
-  if (userSavingsRatio > 0 && userSavingsRatio < 0.1) {
-    advice += ' 저축률이 10% 미만이에요. 먼저 저축 비율을 올리는 게 우선이에요.'
   }
 
   return {
