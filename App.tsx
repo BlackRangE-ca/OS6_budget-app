@@ -13,11 +13,13 @@ import AddScreen from './app/(tabs)/add'
 import AnalysisScreen from './app/(tabs)/analysis'
 import SettingsScreen from './app/(tabs)/settings'
 import InvestmentScreen from './app/(tabs)/investment'
-import SupportScreen from './app/(tabs)/support'
 import EditScreen from './app/edit'
 import SalaryScreen from './app/salary'
 import FixedDetailScreen from './app/fixed-detail'
 import AllTransactionsScreen from './app/all-transactions'
+import PeerComparisonScreen from './app/peer-comparison'
+import SupportScreen from './app/(tabs)/support'
+import SupportDetailScreen from './app/support-detail'
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
@@ -69,7 +71,9 @@ function AuthStack() {
       <Stack.Screen name="Salary" component={SalaryScreen} />
       <Stack.Screen name="FixedDetail" component={FixedDetailScreen} />
       <Stack.Screen name="AllTransactions" component={AllTransactionsScreen} />
+      <Stack.Screen name="PeerComparison" component={PeerComparisonScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
+      <Stack.Screen name="SupportDetail" component={SupportDetailScreen} />
     </Stack.Navigator>
   )
 }
