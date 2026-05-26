@@ -89,23 +89,37 @@ function cleanMerchant(value: string) {
     .trim()
 }
 
+const SENTENCE_ENDINGS = /(?:어요|습니다|했어요|됐어요|되었어요|입니다|했습니다|됩니다)$/
+
+function filterTokens(s: string) {
+  return s.split(/\s+/).filter(p => p.length >= 2).join(' ')
+}
+
 function extractMerchant(text: string) {
   const amountMatch = text.match(/(\d{1,3}(?:,\d{3})+|\d+)\s*원/)
   if (!amountMatch || amountMatch.index == null) return ''
 
+  const beforeAmount = text.slice(0, amountMatch.index)
   let afterAmount = text.slice(amountMatch.index + amountMatch[0].length)
+
   const stopIndex = MERCHANT_STOP_WORDS
     .map(word => afterAmount.indexOf(word))
     .filter(index => index >= 0)
     .sort((a, b) => a - b)[0]
-
   if (stopIndex != null) afterAmount = afterAmount.slice(0, stopIndex)
+
+  // 카카오페이/토스 형식: "[설명] 상점에서 N원을 결제했어요" — 금액 앞 "에서" 바로 전이 상점명
+  const eseMatch = beforeAmount.match(/(.+)에서\s*$/)
+  if (eseMatch) {
+    const parts = eseMatch[1].trim().split(/\s+/).filter(p => !SENTENCE_ENDINGS.test(p))
+    const cleaned = filterTokens(cleanMerchant(parts.slice(-3).join(' ')))
+    if (cleaned) return cleaned.slice(0, 40)
+  }
 
   const fromAfterAmount = cleanMerchant(afterAmount)
   if (fromAfterAmount) return fromAfterAmount.slice(0, 40)
 
-  const beforeAmount = text.slice(0, amountMatch.index)
-  return cleanMerchant(beforeAmount).slice(0, 40)
+  return filterTokens(cleanMerchant(beforeAmount)).slice(0, 40)
 }
 
 function inferCategory(text: string, merchant: string, type: TransactionType): Category {
