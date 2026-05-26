@@ -76,7 +76,17 @@ export async function fetchYouthHousing(): Promise<{ data: HousingNotice[]; isFa
       `&PAGE_NO=1`
 
     const res = await fetch(url)
-    const data = await res.json()
+    const rawText = await res.text()
+    console.log('[LH] status:', res.status, '| preview:', rawText.slice(0, 300))
+    if (rawText.trimStart().startsWith('<')) {
+      const errType = rawText.includes('Forbidden') ? 'Forbidden (API 활용신청 필요)'
+        : rawText.includes('NOT_REGISTERED') ? 'KEY_NOT_REGISTERED'
+        : rawText.includes('ACCESS_DENIED') ? 'ACCESS_DENIED'
+        : 'XML_ERROR'
+      console.error('[LH]', errType, ':', rawText.slice(0, 200))
+      return { data: FALLBACK_HOUSING, isFallback: true }
+    }
+    const data = JSON.parse(rawText)
 
     // 공공데이터포털 표준 응답 형식 + LH 자체 형식 모두 시도
     const rawItems = data?.response?.body?.items?.item

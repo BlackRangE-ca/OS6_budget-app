@@ -18,11 +18,11 @@ type UserMetrics = {
 
 // ── 공통 컴포넌트 ──────────────────────────────────────────
 
-function FallbackBanner() {
+function FallbackBanner({ message = 'API 연동 작업 중 · 기준값으로 표시' }: { message?: string }) {
   return (
     <View style={styles.fallbackBanner}>
-      <Ionicons name="warning-outline" size={13} color="#D97706" />
-      <Text style={styles.fallbackText}>서버 연결 실패 · 참고값으로 표시 중</Text>
+      <Ionicons name="construct-outline" size={13} color="#D97706" />
+      <Text style={styles.fallbackText}>{message}</Text>
     </View>
   )
 }
@@ -221,8 +221,15 @@ export default function SupportScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>지원금 정보</Text>
-      <Text style={styles.subtitle}>청년 맞춤 정책 · 금융 · 주거 · 경제</Text>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={20} color="#6B7280" />
+        </TouchableOpacity>
+        <View>
+          <Text style={styles.title}>지원금 정보</Text>
+          <Text style={styles.subtitle}>청년 맞춤 정책 · 금융 · 주거 · 경제</Text>
+        </View>
+      </View>
 
       <ScrollView
         horizontal
@@ -257,7 +264,7 @@ export default function SupportScreen({ navigation }: any) {
           ListHeaderComponent={
             <>
               {selectedCategory === 'policy' && policyRecommend && <RecommendCard {...policyRecommend} />}
-              {selectedCategory === 'policy' && policyFallback && <FallbackBanner />}
+              {selectedCategory === 'policy' && policyFallback && <FallbackBanner message="API 연동 작업 중 · 주요 청년 정책 기준값으로 표시" />}
               {selectedCategory === 'finance' && financeRecommend && <RecommendCard {...financeRecommend} />}
             </>
           }
@@ -297,7 +304,7 @@ function HousingTab({ notices, navigation, isFallback, recommend }: {
       ListHeaderComponent={
         <>
           {recommend && <RecommendCard {...recommend} />}
-          {isFallback && <FallbackBanner />}
+          {isFallback && <FallbackBanner message="API 연동 작업 중 · LH 공공임대주택 기준값으로 표시" />}
         </>
       }
       ListEmptyComponent={<Text style={styles.empty}>주거 지원 정보가 없어요</Text>}
@@ -345,7 +352,7 @@ function EconomyTab({ indicators, rates, indicatorsFallback, savingsRate }: {
 
       <Text style={styles.sectionLabel}>주요 경제지표</Text>
       <Text style={styles.economyDesc}>한국은행 ECOS 기준</Text>
-      {indicatorsFallback && <FallbackBanner />}
+      {indicatorsFallback && <FallbackBanner message="API 연동 작업 중 · 한국은행 ECOS 기준값으로 표시" />}
       {indicators.map(item => (
         <View key={item.id} style={styles.econCard}>
           <View style={styles.econLeft}>
@@ -393,8 +400,10 @@ function EconomyTab({ indicators, rates, indicatorsFallback, savingsRate }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F4F8', paddingTop: 60, paddingHorizontal: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 24, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  subtitle: { fontSize: 13, color: '#9CA3AF', marginBottom: 16 },
+  subtitle: { fontSize: 13, color: '#9CA3AF' },
   tabScroll: { flexGrow: 0, marginBottom: 14 },
   tabContainer: { flexDirection: 'row', gap: 8, paddingRight: 16, paddingVertical: 4 },
   tabButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: '#E5E7EB', minHeight: 40, justifyContent: 'center' },

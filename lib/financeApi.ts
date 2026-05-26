@@ -33,7 +33,7 @@ export async function fetchDepositProducts(): Promise<DepositProduct[]> {
   const baseList = data?.result?.baseList ?? []
   const optionList = data?.result?.optionList ?? []
 
-  return baseList.slice(0, 20).map((product: any, index: number) => {
+  return baseList.slice(0, 50).map((product: any, index: number) => {
     const options = optionList.filter(
       (option: any) => option.fin_prdt_cd === product.fin_prdt_cd
     )
@@ -124,7 +124,7 @@ export async function fetchSavingProducts(): Promise<DepositProduct[]> {
   const baseList = data?.result?.baseList ?? []
   const optionList = data?.result?.optionList ?? []
 
-  return baseList.slice(0, 20).map((product: any, index: number) => {
+  return baseList.slice(0, 50).map((product: any, index: number) => {
     const options = optionList.filter(
       (option: any) => option.fin_prdt_cd === product.fin_prdt_cd
     )

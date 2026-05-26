@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity, Modal, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import Svg, { Circle, G, Polyline, Line, Text as SvgText } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
@@ -318,6 +318,7 @@ function shiftMonth(month: string, delta: number) {
 }
 
 export default function AnalysisScreen() {
+  const navigation = useNavigation() as any
   const currentMonth = getMonthStr(new Date())
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [topCategory, setTopCategory] = useState('')
@@ -690,6 +691,20 @@ export default function AnalysisScreen() {
         </View>
       )}
 
+      {/* AI 챗봇 진입 */}
+      <TouchableOpacity style={styles.chatbotBanner} onPress={() => navigation.navigate('Chatbot')}>
+        <View style={styles.chatbotLeft}>
+          <View style={styles.chatbotIconWrap}>
+            <Ionicons name="sparkles" size={18} color="#7C3AED" />
+          </View>
+          <View>
+            <Text style={styles.chatbotTitle}>AI 재무 상담</Text>
+            <Text style={styles.chatbotSub}>소비 패턴 기반 맞춤 조언 받기</Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#7C3AED" />
+      </TouchableOpacity>
+
       {/* 과소비 카테고리 경고 */}
       {overSpent.length > 0 && (
         <View style={[styles.card, styles.warningCard]}>
@@ -824,6 +839,18 @@ const styles = StyleSheet.create({
   monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827', minWidth: 100, textAlign: 'center' },
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 12 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 16 },
+  chatbotBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#EDE9FE', borderRadius: 20, marginHorizontal: 16, marginBottom: 12,
+    padding: 16, borderWidth: 1, borderColor: '#DDD6FE',
+  },
+  chatbotLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  chatbotIconWrap: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center',
+  },
+  chatbotTitle: { fontSize: 15, fontWeight: '700', color: '#5B21B6' },
+  chatbotSub: { fontSize: 12, color: '#7C3AED', marginTop: 2 },
   warningCard: { backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA' },
   warningTitle: { fontSize: 14, fontWeight: '700', color: '#C2410C', marginBottom: 8 },
   warningText: { fontSize: 13, color: '#9A3412', lineHeight: 20 },

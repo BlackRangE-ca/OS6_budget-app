@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { View } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
@@ -20,45 +21,51 @@ import AllTransactionsScreen from './app/all-transactions'
 import PeerComparisonScreen from './app/peer-comparison'
 import SupportScreen from './app/(tabs)/support'
 import SupportDetailScreen from './app/support-detail'
+import ChatbotScreen from './app/chatbot'
+import InvestmentRecommendationScreen from './app/investment-recommendation'
+import ChatbotFAB from './components/ChatbotFAB'
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
 
 function MainTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopWidth: 0,
-          elevation: 12,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 12,
-          height: 64,
-          paddingBottom: 10,
-        },
-        tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: '#9CA3AF',
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
-        tabBarIcon: ({ focused, color, size }) => {
-          const icons: Record<string, string> = {
-            홈: focused ? 'home' : 'home-outline',
-            자산: focused ? 'wallet' : 'wallet-outline',
-            투자: focused ? 'trending-up' : 'trending-up-outline',
-            설정: focused ? 'menu' : 'menu-outline',
-          }
-          return <Ionicons name={icons[route.name] as any} size={22} color={color} />
-        },
-      })}
-    >
-      <Tab.Screen name="홈" component={DashboardScreen} />
-      <Tab.Screen name="자산" component={AnalysisScreen} />
-      <Tab.Screen name="투자" component={InvestmentScreen} />
-      <Tab.Screen name="설정" component={SettingsScreen} />
-    </Tab.Navigator>
+    <View style={{ flex: 1 }}>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: '#fff',
+            borderTopWidth: 0,
+            elevation: 12,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.06,
+            shadowRadius: 12,
+            height: 64,
+            paddingBottom: 10,
+          },
+          tabBarActiveTintColor: '#2563EB',
+          tabBarInactiveTintColor: '#9CA3AF',
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+          tabBarIcon: ({ focused, color }) => {
+            const icons: Record<string, string> = {
+              홈: focused ? 'home' : 'home-outline',
+              자산: focused ? 'wallet' : 'wallet-outline',
+              투자: focused ? 'trending-up' : 'trending-up-outline',
+              설정: focused ? 'menu' : 'menu-outline',
+            }
+            return <Ionicons name={icons[route.name] as any} size={22} color={color} />
+          },
+        })}
+      >
+        <Tab.Screen name="홈" component={DashboardScreen} />
+        <Tab.Screen name="자산" component={AnalysisScreen} />
+        <Tab.Screen name="투자" component={InvestmentScreen} />
+        <Tab.Screen name="설정" component={SettingsScreen} />
+      </Tab.Navigator>
+      <ChatbotFAB />
+    </View>
   )
 }
 
@@ -74,6 +81,8 @@ function AuthStack() {
       <Stack.Screen name="PeerComparison" component={PeerComparisonScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
       <Stack.Screen name="SupportDetail" component={SupportDetailScreen} />
+      <Stack.Screen name="Chatbot" component={ChatbotScreen} />
+      <Stack.Screen name="InvestmentRecommendation" component={InvestmentRecommendationScreen} />
     </Stack.Navigator>
   )
 }

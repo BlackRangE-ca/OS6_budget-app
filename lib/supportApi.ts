@@ -108,33 +108,62 @@ export async function fetchYouthPolicies(): Promise<{ data: ApiSupportProgram[];
 
   try {
     const url =
-      `https://www.youthcenter.go.kr/go/opi/selectPolicyList.do` +
-      `?openApiVlak=${YOUTH_KEY}` +
-      `&display=10` +
-      `&pageIndex=1` +
-      `&srchPolicyId=` +
-      `&srchFieldCd=030006` // 일자리·금융·주거
+      `https://www.youthcenter.go.kr/go/ythip/getPlcy` +
+      `?apiKeyNm=${YOUTH_KEY}` +
+      `&pageNum=1` +
+      `&pageSize=20` +
+      `&rtnType=json` +
+      `&plcyKywdNm=${encodeURIComponent('금융지원,주거지원,취업지원,자산형성,생활지원')}`
 
-    const response = await fetch(url)
-    const data = await response.json()
-    const list = data?.youthPolicy ?? []
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000)
+    const response = await fetch(url, { signal: controller.signal })
+    clearTimeout(timeout)
 
-    if (list.length === 0) return { data: YOUTH_POLICY_FALLBACK, isFallback: true }
-
-    return {
-      data: list.map((item: any) => ({
-        id: item.polyBizSjnm ?? String(Math.random()),
-        title: item.polyBizSjnm ?? '청년 정책',
-        category: item.polyRlmCd ?? '청년지원',
-        target: item.ageInfo ?? '청년',
-        summary: item.polyItcnCn ?? '',
-        condition: item.acptMthd ?? '',
-        benefit: item.sporCn ?? '',
-        link: item.rfcSiteAddrMobile ?? 'https://www.youthcenter.go.kr',
-      })),
-      isFallback: false,
+    const rawText = await response.text()
+    console.log('[온통청년] status:', response.status, '| full:', rawText.slice(0, 500))
+    if (rawText.trimStart().startsWith('<')) {
+      console.error('[온통청년] HTML 응답 — 파라미터 오류')
+      return { data: YOUTH_POLICY_FALLBACK, isFallback: true }
     }
-  } catch {
+    const data = JSON.parse(rawText)
+    const raw: any[] = data?.result?.youthPolicyList ?? []
+    // 지역명 또는 괄호로 시작하는 로컬 정책 제외
+    const LOCAL_KEYWORDS = [
+      '서울','부산','대구','인천','광주','대전','울산','세종','경기','강원',
+      '충북','충남','전북','전남','경북','경남','제주','수원','성남','고양',
+      '용인','안산','안양','남양주','화성','평택','파주','시흥','김포','하남',
+      '춘천','원주','강릉','청주','충주','천안','공주','보령','아산','서산',
+      '논산','당진','태안','전주','군산','익산','정읍','남원','목포','여수',
+      '순천','나주','광양','고흥','보성','함평','포항','경주','김천','안동',
+      '구미','창원','진주','통영','김해','밀양','거제','양산','홍성','남도',
+    ]
+    const apiItems: ApiSupportProgram[] = raw
+      .filter((item: any) => {
+        const name: string = item.plcyNm ?? ''
+        if (name.startsWith('(')) return false
+        return !LOCAL_KEYWORDS.some(r => name.startsWith(r))
+      })
+      .slice(0, 10)
+      .map((item: any) => ({
+        id: item.plcyNo ?? String(Math.random()),
+        title: item.plcyNm ?? '청년 정책',
+        category: item.lclsfNm ?? item.mclsfNm ?? '청년지원',
+        target: item.ageInfo ?? item.trgtNm ?? '청년',
+        summary: item.plcyExplnCn ?? item.plcyExpln ?? '',
+        condition: item.aplctnMthd ?? '',
+        benefit: item.sprtCn ?? item.plcyExplnCn ?? '',
+        link: item.rfcSiteAddrMobile ?? item.rfcSiteAddr ?? 'https://www.youthcenter.go.kr',
+      }))
+
+    // 주요 고정 정책 + API 추가 정책 합산 (중복 제목 제거)
+    const merged = [...YOUTH_POLICY_FALLBACK]
+    for (const item of apiItems) {
+      if (!merged.some(f => f.title === item.title)) merged.push(item)
+    }
+    return { data: merged, isFallback: false }
+  } catch (e) {
+    console.error('[온통청년] error:', e)
     return { data: YOUTH_POLICY_FALLBACK, isFallback: true }
   }
 }

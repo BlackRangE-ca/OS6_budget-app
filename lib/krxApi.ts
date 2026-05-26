@@ -1,4 +1,4 @@
-const KRX_KEY = process.env.EXPO_PUBLIC_KRX_KEY
+import { supabase } from './supabase'
 
 export type ETFProduct = {
   id: string
@@ -17,62 +17,53 @@ const FALLBACK_ETFS: ETFProduct[] = [
   { id: 'A411060', name: 'ACE 미국배당다우존스', price: 14320, aum: 15430, change: 0.2, category: '해외주식' },
   { id: 'A379800', name: 'KODEX 미국S&P500TR', price: 16890, aum: 12300, change: 0.7, category: '해외주식' },
   { id: 'A152100', name: 'ARIRANG 고배당주', price: 11250, aum: 8920, change: 0.1, category: '국내주식' },
-  { id: 'A kodex', name: 'KODEX 2차전지산업', price: 16430, aum: 7650, change: -1.1, category: '테마' },
   { id: 'A091160', name: 'KODEX 반도체', price: 42100, aum: 6980, change: 0.5, category: '테마' },
   { id: 'A148070', name: 'KOSEF 국고채10년', price: 11320, aum: 5430, change: 0.0, category: '채권' },
 ]
 
 export async function fetchTopETFs(): Promise<{ data: ETFProduct[]; isFallback: boolean; fallbackReason?: 'no_key' | 'error' }> {
-  if (!KRX_KEY) return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'no_key' }
-
   try {
-    const otpRes = await fetch(
-      `https://openapi.krx.co.kr/contents/COM/GenerateOTP.cmd` +
-      `?bld=dbms/MDC/STAT/standard/MDCSTAT04301&locale=ko_KR&auth=${KRX_KEY}`
-    )
-    const otp = await otpRes.text()
-    if (!otp || otp.length < 10 || otp.trimStart().startsWith('<')) {
-      console.error('[KRX] OTP error — IP 미등록이거나 키 오류. preview:', otp?.slice(0, 120))
+    const { data: res, error } = await supabase.functions.invoke('krx-proxy', {
+      body: { action: 'fetch_etfs' },
+    })
+
+    if (error || res?.error) {
+      const msg = res?.error ?? error?.message ?? 'unknown'
+      console.error('[KRX] edge function error:', msg)
       return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'error' }
     }
 
-    const dataRes = await fetch(
-      'https://openapi.krx.co.kr/contents/MDC/STAT/standard/MDCSTAT04301',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `code=${otp}`,
-      }
-    )
-    const rawText = await dataRes.text()
-    if (rawText.trimStart().startsWith('<')) {
-      console.error('[KRX] data response is HTML, not JSON')
-      return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'error' }
-    }
-    const data = JSON.parse(rawText)
-    const rows: any[] = data?.output ?? []
-
+    const rows: any[] = res?.data ?? []
     if (rows.length === 0) {
-      console.error('[KRX] empty output:', JSON.stringify(data)?.slice(0, 300))
       return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'error' }
     }
+
+    const parse = (v: string | undefined) => Number((v ?? '0').replace(/,/g, ''))
 
     return {
       data: rows
-        .sort((a, b) => Number(b.NASS_EVLAMT ?? 0) - Number(a.NASS_EVLAMT ?? 0))
+        .sort((a, b) => parse(b.INVSTASST_NETASST_TOTAMT) - parse(a.INVSTASST_NETASST_TOTAMT))
         .slice(0, 10)
         .map((row, i) => ({
           id: row.ISU_CD ?? `etf-${i}`,
           name: row.ISU_NM ?? 'ETF',
-          price: Number(row.CLSPRC?.replace(/,/g, '') ?? 0),
-          aum: Math.round(Number(row.NASS_EVLAMT?.replace(/,/g, '') ?? 0) / 100000000),
+          price: parse(row.TDD_CLSPRC),
+          aum: Math.round(parse(row.INVSTASST_NETASST_TOTAMT) / 100000000),
           change: Number(row.FLUC_RT ?? 0),
           category: row.IDX_IND_NM ?? '기타',
         })),
       isFallback: false,
     }
   } catch (e) {
-    console.error('[KRX] fetch error:', e)
+    console.error('[KRX] unexpected error:', e)
     return { data: FALLBACK_ETFS, isFallback: true, fallbackReason: 'error' }
   }
+}
+
+// 서버 IP 확인 (KRX 포털 등록용)
+export async function getEdgeFunctionIp(): Promise<string> {
+  const { data } = await supabase.functions.invoke('krx-proxy', {
+    body: { action: 'get_ip' },
+  })
+  return data?.ip ?? 'unknown'
 }

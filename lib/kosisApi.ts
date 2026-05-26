@@ -1,12 +1,12 @@
-// 통계청 KOSIS API - 가계금융복지조사 연령대별 금융자산 현황
-// API 키 발급: https://kosis.kr/openapi/index/index.jsp
+// 통계청 KOSIS API - 가구주연령계층별 자산·부채·소득 현황 (가계금융복지조사)
+// 테이블: DT_1HDAAA06, orgId: 101
 
 const KOSIS_KEY = process.env.EXPO_PUBLIC_KOSIS_KEY
 
 export type AgeGroupAsset = {
   ageGroup: string
   gender: 'male' | 'female' | 'all'
-  totalAsset: number   // 평균 금융자산 (만원)
+  totalAsset: number   // 총자산 평균 (만원)
   deposit: number      // 예·적금 비율 (%)
   stock: number        // 주식·펀드 비율 (%)
   insurance: number    // 보험 비율 (%)
@@ -23,7 +23,6 @@ export type PeerComparison = {
   advice: string
 }
 
-// 사회초년생 기준 연령대
 export const AGE_GROUPS = ['22~25세', '26~29세', '30~34세', '35세 이상']
 export const AGE_LABELS: Record<string, string> = {
   '22~25세': '사회초년생 1~3년차',
@@ -32,101 +31,121 @@ export const AGE_LABELS: Record<string, string> = {
   '35세 이상': '35세 이상',
 }
 
-// 통계청 2023 가계금융복지조사 기반 추정값 (성별·연령대별)
-function getFallbackData(gender: 'male' | 'female'): AgeGroupAsset[] {
-  if (gender === 'male') {
-    return [
-      { ageGroup: '22~25세', gender: 'male', totalAsset: 1850, deposit: 60, stock: 24, insurance: 12, other: 4 },
-      { ageGroup: '26~29세', gender: 'male', totalAsset: 3400, deposit: 53, stock: 30, insurance: 13, other: 4 },
-      { ageGroup: '30~34세', gender: 'male', totalAsset: 6200, deposit: 48, stock: 32, insurance: 15, other: 5 },
-      { ageGroup: '35세 이상', gender: 'male', totalAsset: 9800, deposit: 45, stock: 30, insurance: 18, other: 7 },
-    ]
-  }
-  return [
-    { ageGroup: '22~25세', gender: 'female', totalAsset: 1620, deposit: 70, stock: 14, insurance: 12, other: 4 },
-    { ageGroup: '26~29세', gender: 'female', totalAsset: 2950, deposit: 63, stock: 19, insurance: 14, other: 4 },
-    { ageGroup: '30~34세', gender: 'female', totalAsset: 5400, deposit: 57, stock: 23, insurance: 16, other: 4 },
-    { ageGroup: '35세 이상', gender: 'female', totalAsset: 7600, deposit: 54, stock: 21, insurance: 20, other: 5 },
-  ]
+// 가계금융복지조사 기반 금융자산 구성비 추정값 (예·적금/주식·펀드/보험 비율)
+// 총자산 대비가 아닌 금융자산 내 구성비
+const ASSET_RATIOS: Record<string, { deposit: number; stock: number; insurance: number }> = {
+  '22~25세': { deposit: 60, stock: 24, insurance: 12 },
+  '26~29세': { deposit: 53, stock: 30, insurance: 13 },
+  '30~34세': { deposit: 48, stock: 32, insurance: 15 },
+  '35세 이상': { deposit: 45, stock: 30, insurance: 18 },
 }
 
-export async function fetchAgeGroupAssets(gender: 'male' | 'female' = 'male'): Promise<{ data: AgeGroupAsset[]; isFallback: boolean; fallbackReason?: 'no_key' | 'error' }> {
-  if (!KOSIS_KEY) return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'no_key' }
+// 총자산 → 금융자산 환산 비율 (29세 이하 금융자산은 총자산의 약 35%)
+const FINANCIAL_RATIO: Record<string, number> = {
+  '22~25세': 0.38,
+  '26~29세': 0.35,
+  '30~34세': 0.28,
+  '35세 이상': 0.25,
+}
 
-  const KOSIS_STATS_ID = process.env.EXPO_PUBLIC_KOSIS_STATS_ID
-  if (!KOSIS_STATS_ID) return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'no_key' }
+function buildFallback(gender: 'male' | 'female'): AgeGroupAsset[] {
+  const base = gender === 'male'
+    ? [1850, 3400, 6200, 9800]
+    : [1620, 2950, 5400, 7600]
+
+  return AGE_GROUPS.map((ag, i) => {
+    const r = ASSET_RATIOS[ag]
+    return {
+      ageGroup: ag, gender,
+      totalAsset: base[i],
+      deposit: r.deposit, stock: r.stock, insurance: r.insurance,
+      other: Math.max(0, 100 - r.deposit - r.stock - r.insurance),
+    }
+  })
+}
+
+// KOSIS C2 코드 → 앱 연령 그룹 매핑
+const C2_MAP: Record<string, string[]> = {
+  '22~25세': ['B1601'],          // 29세 이하
+  '26~29세': ['B1601'],          // 29세 이하 (동일)
+  '30~34세': ['B1602'],          // 30~39세
+  '35세 이상': ['B1606', 'B1602'], // 39세 이하 우선, 없으면 30~39세
+}
+
+export async function fetchAgeGroupAssets(
+  gender: 'male' | 'female' = 'male',
+): Promise<{ data: AgeGroupAsset[]; isFallback: boolean; fallbackReason?: 'no_key' | 'error' }> {
+  if (!KOSIS_KEY) return { data: buildFallback(gender), isFallback: true, fallbackReason: 'no_key' }
 
   try {
     const url =
-      `https://kosis.kr/openapi/statisticsData.do` +
+      `https://kosis.kr/openapi/Param/statisticsParameterData.do` +
       `?method=getList` +
       `&apiKey=${KOSIS_KEY}` +
-      `&userStatsId=${KOSIS_STATS_ID}` +
-      `&prdSe=Y` +
-      `&startPrdDe=2023` +
-      `&endPrdDe=2023` +
+      `&orgId=101` +
+      `&tblId=DT_1HDAAA06` +
+      `&itmId=T01+` +
+      `&objL1=A0100` +
+      `&objL2=ALL` +
+      `&objL3=C05+` +
       `&format=json` +
-      `&jsonVD=Y`
+      `&jsonVD=Y` +
+      `&prdSe=Y` +
+      `&newEstPrdCnt=1`
 
     const response = await fetch(url)
     const rawText = await response.text()
+
     if (rawText.trimStart().startsWith('<')) {
-      console.error('[KOSIS] HTML response — 키 오류 또는 파라미터 문제. preview:', rawText.slice(0, 120))
-      return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'error' }
-    }
-    const data = JSON.parse(rawText)
-
-    if (!data || data.err || !Array.isArray(data)) {
-      console.error('[KOSIS] unexpected response:', JSON.stringify(data)?.slice(0, 300))
-      return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'error' }
+      console.error('[KOSIS] HTML 응답:', rawText.slice(0, 120))
+      return { data: buildFallback(gender), isFallback: true, fallbackReason: 'error' }
     }
 
-    const parsed = parseKosisData(data, gender)
-    if (parsed.length === 0) console.error('[KOSIS] parseKosisData returned empty — raw row count:', data.length)
-    return parsed.length > 0 ? { data: parsed, isFallback: false } : { data: getFallbackData(gender), isFallback: true, fallbackReason: 'error' }
+    const data: any[] = JSON.parse(rawText)
+
+    if (!Array.isArray(data) || data.length === 0 || data[0]?.err) {
+      console.error('[KOSIS] 오류:', JSON.stringify(data)?.slice(0, 200))
+      return { data: buildFallback(gender), isFallback: true, fallbackReason: 'error' }
+    }
+
+    // C3=C05(자산), ITM=T01(전가구 평균), C1=A0100(전체) 행만 사용
+    const assetRows = data.filter(
+      (r: any) => r.C3 === 'C05' && r.ITM_ID === 'T01' && r.C1 === 'A0100'
+    )
+
+    // C2 코드 → 자산값 맵
+    const c2Values: Record<string, number> = {}
+    for (const row of assetRows) {
+      const val = parseFloat(row.DT ?? '0')
+      if (!isNaN(val) && val > 0) c2Values[row.C2] = val
+    }
+
+    console.log('[KOSIS] c2Values:', JSON.stringify(c2Values))
+
+    if (Object.keys(c2Values).length === 0) {
+      return { data: buildFallback(gender), isFallback: true, fallbackReason: 'error' }
+    }
+
+    const result: AgeGroupAsset[] = AGE_GROUPS.map(ag => {
+      const codes = C2_MAP[ag]
+      const totalAssetRaw = codes.map(c => c2Values[c]).find(v => v !== undefined) ?? 0
+      // 총자산 → 금융자산 환산
+      const financialAsset = Math.round(totalAssetRaw * (FINANCIAL_RATIO[ag] ?? 0.3))
+      const r = ASSET_RATIOS[ag]
+      return {
+        ageGroup: ag, gender,
+        totalAsset: financialAsset > 0 ? financialAsset : buildFallback(gender).find(f => f.ageGroup === ag)!.totalAsset,
+        deposit: r.deposit, stock: r.stock, insurance: r.insurance,
+        other: Math.max(0, 100 - r.deposit - r.stock - r.insurance),
+      }
+    })
+
+    console.log('[KOSIS] 파싱 결과:', result.map(r => `${r.ageGroup}:${r.totalAsset}만원`).join(', '))
+    return { data: result, isFallback: false }
   } catch (e) {
     console.error('[KOSIS] fetch error:', e)
-    return { data: getFallbackData(gender), isFallback: true, fallbackReason: 'error' }
+    return { data: buildFallback(gender), isFallback: true, fallbackReason: 'error' }
   }
-}
-
-function parseKosisData(data: any[], gender: 'male' | 'female'): AgeGroupAsset[] {
-  const ageGroups = ['22~25세', '26~29세', '30~34세', '35세 이상']
-  const kosisKeywords: Record<string, string[]> = {
-    '22~25세': ['20대 초반', '22~24', '25~29'],
-    '26~29세': ['20대 후반', '25~29', '26~29'],
-    '30~34세': ['30대 초반', '30~34'],
-    '35세 이상': ['35~39', '40대', '50대'],
-  }
-
-  const result: AgeGroupAsset[] = []
-  for (const age of ageGroups) {
-    const keywords = kosisKeywords[age]
-    const rows = data.filter((r: any) =>
-      keywords.some(k => r.classNm?.includes(k))
-    )
-    if (rows.length === 0) continue
-
-    const get = (itemNm: string) =>
-      Number(rows.find((r: any) => r.itmNm?.includes(itemNm))?.DT ?? 0)
-
-    const deposit = get('예·적금')
-    const stock = get('주식')
-    const insurance = get('보험')
-    const total = deposit + stock + insurance
-    if (total === 0) continue
-
-    result.push({
-      ageGroup: age,
-      gender,
-      totalAsset: get('금융자산'),
-      deposit: Math.round(deposit / total * 100),
-      stock: Math.round(stock / total * 100),
-      insurance: Math.round(insurance / total * 100),
-      other: Math.max(0, 100 - Math.round(deposit / total * 100) - Math.round(stock / total * 100) - Math.round(insurance / total * 100)),
-    })
-  }
-  return result
 }
 
 export function getPeerComparison(
@@ -135,7 +154,7 @@ export function getPeerComparison(
   userAsset: number,
   userSavingsRatio: number,
 ): PeerComparison {
-  const data = getFallbackData(gender)
+  const data = buildFallback(gender)
   const myGroup = data[Math.min(ageGroupIndex, data.length - 1)]
 
   const assetDiff = userAsset - myGroup.totalAsset
