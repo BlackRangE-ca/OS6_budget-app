@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import * as Clipboard from 'expo-clipboard'
 import { Ionicons } from '@expo/vector-icons'
@@ -87,7 +87,8 @@ export default function AddScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <Text style={styles.title}>지출 추가</Text>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
@@ -164,6 +165,7 @@ export default function AddScreen() {
         <Text style={styles.buttonText}>{loading ? '저장 중...' : '저장하기'}</Text>
       </TouchableOpacity>
     </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
