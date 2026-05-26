@@ -111,7 +111,9 @@ function extractMerchant(text: string) {
   // 카카오페이/토스 형식: "[설명] 상점에서 N원을 결제했어요" — 금액 앞 "에서" 바로 전이 상점명
   const eseMatch = beforeAmount.match(/(.+)에서\s*$/)
   if (eseMatch) {
-    const parts = eseMatch[1].trim().split(/\s+/).filter(p => !SENTENCE_ENDINGS.test(p))
+    const parts = eseMatch[1].trim().split(/\s+/)
+      .map(p => p.replace(/[.!?。,]+$/, ''))
+      .filter(p => !SENTENCE_ENDINGS.test(p))
     const cleaned = filterTokens(cleanMerchant(parts.slice(-3).join(' ')))
     if (cleaned) return cleaned.slice(0, 40)
   }
