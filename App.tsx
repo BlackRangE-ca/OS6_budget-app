@@ -18,16 +18,16 @@ import EditScreen from './app/edit'
 import SalaryScreen from './app/salary'
 import FixedDetailScreen from './app/fixed-detail'
 import AllTransactionsScreen from './app/all-transactions'
-<<<<<<< Updated upstream
+
 import PeerComparisonScreen from './app/peer-comparison'
 import SupportScreen from './app/(tabs)/support'
 import SupportDetailScreen from './app/support-detail'
 import ChatbotScreen from './app/chatbot'
 import InvestmentRecommendationScreen from './app/investment-recommendation'
 import ChatbotFAB from './components/ChatbotFAB'
-=======
+
 import NewsScreen from './app/(tabs)/news'
->>>>>>> Stashed changes
+
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
@@ -84,13 +84,13 @@ function AuthStack() {
       <Stack.Screen name="AllTransactions" component={AllTransactionsScreen} />
       <Stack.Screen name="PeerComparison" component={PeerComparisonScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
-<<<<<<< Updated upstream
+
       <Stack.Screen name="SupportDetail" component={SupportDetailScreen} />
       <Stack.Screen name="Chatbot" component={ChatbotScreen} />
       <Stack.Screen name="InvestmentRecommendation" component={InvestmentRecommendationScreen} />
-=======
+
       <Stack.Screen name="News" component={NewsScreen} />
->>>>>>> Stashed changes
+
     </Stack.Navigator>
   )
 }
