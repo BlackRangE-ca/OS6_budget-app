@@ -41,11 +41,23 @@ export default function InvestmentScreen() {
         </View>
         <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
       </TouchableOpacity>
+
+      <TouchableOpacity
+  style={styles.supportCard}
+  onPress={() => navigation.navigate('News')}
+>
+  <Text style={styles.supportIcon}>📰</Text>
+  <Text style={styles.supportTitle}>관심사 뉴스</Text>
+  <Text style={styles.supportSubText}>
+    ETF · 예금 · 적금 · 청년 재테크 뉴스 확인
+  </Text>
+</TouchableOpacity>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+<<<<<<< Updated upstream
   container: { flex: 1, backgroundColor: '#F2F4F8', paddingTop: 60 },
   title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 20, paddingHorizontal: 24 },
   menuCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 10, borderRadius: 16, padding: 16, gap: 12 },
@@ -53,4 +65,37 @@ const styles = StyleSheet.create({
   menuText: { flex: 1 },
   menuTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
   menuSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+=======
+  container: { flex: 1, backgroundColor: '#F2F4F8', padding: 24, paddingTop: 60 },
+  title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 40 },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 40 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: '#6B7280' },
+  emptySubText: { fontSize: 14, color: '#9CA3AF', textAlign: 'center', lineHeight: 22 },
+
+  supportCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 22,
+    marginBottom: 28,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  supportIcon: {
+    fontSize: 34,
+    marginBottom: 10,
+  },
+  supportTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  supportSubText: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 21,
+  },
+>>>>>>> Stashed changes
 })
