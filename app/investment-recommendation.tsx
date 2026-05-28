@@ -203,6 +203,42 @@ function getEtfProducts(_etfs: ETFProduct[], risk: RiskType): Product[] {
   return RISK_ETF_LIST[risk]
 }
 
+// ── AI 폴백 조언 생성 (모델 외국어 응답 시 사용) ──────────
+
+function buildFallbackAdvice(
+  riskType: RiskType,
+  salary: number,
+  monthlyExpense: number,
+  assetTotal: number,
+  indicators: EconomyIndicator[],
+): string {
+  const info = RISK_INFO[riskType]
+  const etfs = RISK_ETF_LIST[riskType]
+  const monthlySavable = Math.max(0, salary - monthlyExpense)
+  const rate = indicators.find(i => i.name.includes('기준금리'))
+  const rateVal = rate ? parseFloat(rate.value) : null
+
+  const savingLine = monthlySavable > 0
+    ? `매달 ${monthlySavable.toLocaleString()}원을 투자 가능해요.`
+    : '지출 구조를 점검해 월 투자 여력을 만들어보세요.'
+
+  const alloc = info.alloc[0]
+  const portfolioLine = `${riskType} 성향에는 ${alloc.label} ${alloc.ratio}%를 중심으로 ` +
+    info.alloc.slice(1).map(a => `${a.label} ${a.ratio}%`).join(', ') + ' 배분을 추천해요.'
+
+  const etfLine = etfs.length > 0
+    ? `특히 ${etfs[0].name}은 ${info.desc.split('.')[0]}에 적합한 핵심 상품이에요.`
+    : ''
+
+  const rateLine = rateVal !== null
+    ? rateVal >= 3.0
+      ? '현재 금리가 높으니 예적금 비중을 충분히 유지하는 게 유리해요.'
+      : '저금리 환경에서는 예금보다 투자 비중을 조금 더 높이는 게 효과적이에요.'
+    : ''
+
+  return [savingLine, portfolioLine, etfLine, rateLine].filter(Boolean).join(' ')
+}
+
 // ── 메인 컴포넌트 ─────────────────────────────────────────
 
 export default function InvestmentRecommendationScreen() {
@@ -214,6 +250,7 @@ export default function InvestmentRecommendationScreen() {
   const [answers, setAnswers] = useState<number[]>([])
 
   const [loading, setLoading] = useState(false)
+  const [initLoading, setInitLoading] = useState(true)
   const [deposits, setDeposits] = useState<any[]>([])
   const [etfs, setEtfs] = useState<ETFProduct[]>([])
   const [etfFallback, setEtfFallback] = useState(false)
@@ -226,10 +263,35 @@ export default function InvestmentRecommendationScreen() {
   const [aiLoading, setAiLoading] = useState(false)
   const [riskHistory, setRiskHistory] = useState<{ risk_type: string; created_at: string }[]>([])
   const [simulateMonthly, setSimulateMonthly] = useState(0)
+  const [savedRiskType, setSavedRiskType] = useState<RiskType | null>(null)
 
-  const riskType = calcRisk(answers)
+  // 저장된 성향 있으면 퀴즈 없이 결과 바로 표시
+  const riskType = savedRiskType ?? calcRisk(answers)
 
-  async function loadProducts(finalAnswers: number[] = answers) {
+  useEffect(() => { checkSavedProfile() }, [])
+
+  async function checkSavedProfile() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('risk_profiles')
+        .select('risk_type, selected_bank')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (data) {
+        setSavedRiskType(data.risk_type as RiskType)
+        setSelectedBank(data.selected_bank ?? '기타')
+        loadProducts([], data.risk_type as RiskType)
+        setStep('result')
+      }
+    } finally {
+      setInitLoading(false)
+    }
+  }
+
+  async function loadProducts(finalAnswers: number[] = answers, fromSavedType?: RiskType) {
     setLoading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -251,7 +313,7 @@ export default function InvestmentRecommendationScreen() {
 
       if (user) {
         const [assetRes, budgetRes, txRes, historyRes] = await Promise.all([
-          supabase.from('assets').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(1).single(),
+          supabase.from('user_assets').select('*').eq('user_id', user.id).maybeSingle(),
           supabase.from('budgets').select('salary, amount').eq('user_id', user.id).eq('month', thisMonth).single(),
           supabase.from('transactions').select('amount, category, type').eq('user_id', user.id)
             .gte('date', `${thisMonth}-01`).lt('date', `${nextMonth}-01`),
@@ -281,16 +343,19 @@ export default function InvestmentRecommendationScreen() {
 
         setRiskHistory(historyRes.data ?? [])
 
-        // 성향 저장
-        await supabase.from('risk_profiles').insert({
-          user_id: user.id,
-          risk_type: calcRisk(finalAnswers),
-          quiz_score: finalAnswers.reduce((a, b) => a + b, 0),
-          selected_bank: selectedBank,
-        })
+        // 퀴즈 완료 시에만 성향 저장 (자동 로드 시 중복 저장 방지)
+        if (!fromSavedType && finalAnswers.length > 0) {
+          await supabase.from('risk_profiles').insert({
+            user_id: user.id,
+            risk_type: calcRisk(finalAnswers),
+            quiz_score: finalAnswers.reduce((a, b) => a + b, 0),
+            selected_bank: selectedBank,
+          })
+        }
 
         // AI 동적 추천 (백그라운드)
-        generateAiRecommendation(finalAnswers, salary, monthlyExpense, assetData, econRes.data)
+        const effectiveType = fromSavedType ?? calcRisk(finalAnswers)
+        generateAiRecommendation(effectiveType, salary, monthlyExpense, assetData, econRes.data)
       }
     } finally {
       setLoading(false)
@@ -298,7 +363,7 @@ export default function InvestmentRecommendationScreen() {
   }
 
   async function generateAiRecommendation(
-    finalAnswers: number[],
+    effectiveRiskType: RiskType,
     salary: number,
     monthlyExpense: number,
     assetData: any,
@@ -306,28 +371,47 @@ export default function InvestmentRecommendationScreen() {
   ) {
     setAiLoading(true)
     try {
-      const riskType = calcRisk(finalAnswers)
+      const riskType = effectiveRiskType
       const bank = selectedBank ?? '미선택'
       const assetTotal = assetData ? (assetData.deposit ?? 0) + (assetData.savings ?? 0) + (assetData.stock ?? 0) : 0
       const indicatorStr = indicators.map(i => `${i.name} ${i.value}${i.unit}`).join(', ')
+
+      // 영어 시스템 프롬프트 — LLM이 영어 지시를 훨씬 더 잘 따름
       const systemPrompt =
-        `당신은 투자 전문가입니다. 사용자 데이터를 보고 맞춤 투자 조언을 3~4문장으로 작성하세요.\n` +
-        `규칙: 한글만 사용, 영어/한자 금지. 구체적 금액과 상품명을 포함하세요.`
+        `You are a Korean personal finance coach. ` +
+        `CRITICAL RULE: You MUST write ONLY in Korean (Hangul). ` +
+        `Absolutely NO English, NO Chinese, NO Japanese characters allowed — not even a single letter. ` +
+        `Write exactly 3 sentences of investment advice in Korean only.`
       const userMsg =
         `투자성향: ${riskType} / 주거래은행: ${bank}\n` +
         `월수입: ${salary.toLocaleString()}원 / 월지출: ${monthlyExpense.toLocaleString()}원\n` +
         `현재자산: ${assetTotal.toLocaleString()}원\n` +
         `경제지표: ${indicatorStr || '정보 없음'}\n` +
-        `위 데이터 기반으로 이 사용자에게 맞는 투자 전략을 조언해주세요.`
+        `이 데이터를 바탕으로 투자 조언 3문장만 한국어로 작성:`
 
       const { data, error } = await supabase.functions.invoke('hf-proxy', {
         body: { action: 'generate', systemPrompt, messages: [{ role: 'user', content: userMsg }] },
       })
       if (!error && data?.text) {
-        const clean = (data.text as string).replace(/[一-鿿㐀-䶿豈-﫿]+/g, '').replace(/ {2,}/g, ' ').trim()
-        setAiRecommendation(clean)
+        // 한자·히라가나·가타카나 제거
+        const cleaned = (data.text as string)
+          .replace(/[぀-ヿ･-ﾟ一-鿿㐀-䶿豈-﫿]+/g, '')
+          .replace(/ {2,}/g, ' ')
+          .trim()
+
+        // 한글 음절 카운트 — 20자 미만이면 모델이 외국어로만 응답한 것
+        const koreanCount = (cleaned.match(/[가-힣]/g) ?? []).length
+        if (koreanCount >= 20) {
+          setAiRecommendation(cleaned)
+        } else {
+          setAiRecommendation(buildFallbackAdvice(riskType, salary, monthlyExpense, assetTotal, indicators))
+        }
+      } else {
+        setAiRecommendation(buildFallbackAdvice(riskType, salary, monthlyExpense, assetTotal, indicators))
       }
-    } catch { }
+    } catch {
+      setAiRecommendation(buildFallbackAdvice(effectiveRiskType, salary, monthlyExpense, assetData ? (assetData.deposit ?? 0) + (assetData.savings ?? 0) + (assetData.stock ?? 0) : 0, indicators))
+    }
     setAiLoading(false)
   }
 
@@ -353,6 +437,8 @@ export default function InvestmentRecommendationScreen() {
     setQuizIdx(0)
     setAnswers([])
     setProductTab('deposit')
+    setSavedRiskType(null)
+    setAiRecommendation('')
   }
 
   const info = RISK_INFO[riskType]
@@ -380,8 +466,16 @@ export default function InvestmentRecommendationScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
 
+        {/* ── 초기 로딩 ──────────────────────────────────── */}
+        {initLoading && (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color="#7C3AED" />
+            <Text style={styles.loadingText}>저장된 성향 확인 중...</Text>
+          </View>
+        )}
+
         {/* ── Step 1: 은행 선택 ─────────────────────────── */}
-        {step === 'bank' && (
+        {!initLoading && step === 'bank' && (
           <View style={styles.stepWrap}>
             <Text style={styles.stepLabel}>STEP 1</Text>
             <Text style={styles.stepTitle}>주거래 은행을 선택해주세요</Text>
@@ -413,7 +507,7 @@ export default function InvestmentRecommendationScreen() {
         )}
 
         {/* ── Step 2: 퀴즈 ──────────────────────────────── */}
-        {step === 'quiz' && (
+        {!initLoading && step === 'quiz' && (
           <View style={styles.stepWrap}>
             <Text style={styles.stepLabel}>STEP 2 · {quizIdx + 1}/{QUIZ.length}</Text>
             <Text style={styles.stepTitle}>{QUIZ[quizIdx].q}</Text>
@@ -433,7 +527,7 @@ export default function InvestmentRecommendationScreen() {
         )}
 
         {/* ── Step 3: 결과 ──────────────────────────────── */}
-        {step === 'result' && (
+        {!initLoading && step === 'result' && (
           <View style={styles.stepWrap}>
             {loading ? (
               <View style={styles.loadingWrap}>
@@ -637,6 +731,14 @@ export default function InvestmentRecommendationScreen() {
                   </View>
                 )}
 
+                {/* 저장된 결과 안내 */}
+                {savedRiskType && (
+                  <View style={styles.savedNotice}>
+                    <Ionicons name="checkmark-circle-outline" size={13} color="#059669" />
+                    <Text style={styles.savedNoticeText}>마지막 저장된 성향 결과예요</Text>
+                  </View>
+                )}
+
                 {/* 다시하기 */}
                 <TouchableOpacity style={styles.retryBtn} onPress={reset}>
                   <Ionicons name="refresh-outline" size={16} color="#7C3AED" />
@@ -712,7 +814,9 @@ const styles = StyleSheet.create({
   productDesc: { fontSize: 13, color: '#6B7280', lineHeight: 19 },
   fallbackBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF3C7', borderRadius: 10, padding: 10, marginBottom: 10 },
   fallbackText: { fontSize: 11, color: '#D97706', flex: 1 },
-  retryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#7C3AED' },
+  savedNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center', marginBottom: 8 },
+  savedNoticeText: { fontSize: 12, color: '#059669' },
+  retryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#7C3AED' },
   retryText: { fontSize: 15, fontWeight: '600', color: '#7C3AED' },
   econTip: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#ECFDF5', borderRadius: 12, padding: 12, marginBottom: 14 },
   econTipText: { flex: 1, fontSize: 12, color: '#065F46', lineHeight: 18 },

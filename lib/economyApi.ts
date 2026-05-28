@@ -20,8 +20,9 @@ export type ExchangeRate = {
 }
 
 // ECOS KeyStatisticList에 실제로 있는 지표 키워드
+// 소비자물가 제외: KeyStatisticList가 절대지수(2020=100)를 반환 → StatisticSearch로 별도 계산
 const RELEVANT_KEYWORDS = [
-  '기준금리', '소비자물가', '실업률', 'GDP', '취업자', '국고채'
+  '기준금리', '실업률', 'GDP', '취업자', '국고채'
 ]
 
 
@@ -51,33 +52,77 @@ function formatValue(value: string, unit: string): { value: string; unit: string
   return { value: num.toLocaleString(), unit }
 }
 
+// 소비자물가 전년동월비 계산: StatisticSearch 901Y009(총지수) 14개월치 → YoY
+async function fetchCpiYoY(): Promise<EconomyIndicator | null> {
+  const now = new Date()
+  const fmt = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`
+  const start = fmt(new Date(now.getFullYear() - 1, now.getMonth() - 2, 1))
+  const end = fmt(now)
+  const url = `https://ecos.bok.or.kr/api/StatisticSearch/${BOK_KEY}/json/kr/1/20/901Y009/M/${start}/${end}/0`
+  const res = await fetch(url)
+  const data = await res.json()
+  const rows: any[] = (data?.StatisticSearch?.row ?? [])
+    .filter((r: any) => r.ITEM_NAME1 === '총지수' && r.DATA_VALUE && parseFloat(r.DATA_VALUE) > 0)
+    .sort((a: any, b: any) => a.TIME.localeCompare(b.TIME))
+  if (rows.length < 2) return null
+
+  const latest = rows[rows.length - 1]
+  const latestYM: string = latest.TIME
+  const yearAgoYM = `${parseInt(latestYM.slice(0, 4)) - 1}${latestYM.slice(4)}`
+  const yearAgoRow = rows.find((r: any) => r.TIME === yearAgoYM)
+  if (!yearAgoRow) return null
+
+  const yoy = (parseFloat(latest.DATA_VALUE) - parseFloat(yearAgoRow.DATA_VALUE)) / parseFloat(yearAgoRow.DATA_VALUE) * 100
+  return {
+    id: 'economy-cpi',
+    name: '소비자물가 상승률',
+    value: yoy.toFixed(1),
+    unit: '%',
+    time: `${latestYM.slice(0, 4)}.${latestYM.slice(4)}`,
+    cycle: '월',
+  }
+}
+
 export async function fetchKeyStatistics(): Promise<{ data: EconomyIndicator[]; isFallback: boolean }> {
   if (!BOK_KEY) return { data: getFallbackIndicators(), isFallback: true }
 
   try {
-    const url = `https://ecos.bok.or.kr/api/KeyStatisticList/${BOK_KEY}/json/kr/1/100`
-    const response = await fetch(url)
-    const data = await response.json()
-    const list: any[] = data?.KeyStatisticList?.row ?? []
+    const [mainData, cpiYoY] = await Promise.all([
+      fetch(`https://ecos.bok.or.kr/api/KeyStatisticList/${BOK_KEY}/json/kr/1/100`).then(r => r.json()),
+      fetchCpiYoY().catch(() => null),
+    ])
+
+    const list: any[] = mainData?.KeyStatisticList?.row ?? []
     if (list.length === 0) return { data: getFallbackIndicators(), isFallback: true }
 
     const filtered = list.filter(item =>
       RELEVANT_KEYWORDS.some(k => (item.KEYSTAT_NAME ?? '').includes(k))
     )
 
-    const apiResults = (filtered.length > 0 ? filtered : list).slice(0, 6).map((item: any, index: number) => {
+    const mainResults = (filtered.length > 0 ? filtered : list).slice(0, 5).map((item: any, index: number) => {
       const { value, unit } = formatValue(item.DATA_VALUE ?? '-', item.UNIT_NAME ?? '')
+      const rawTime = item.CYCLE ?? item.TIME ?? ''
       return {
         id: `economy-${index}`,
         name: simplifyName(item.KEYSTAT_NAME ?? '경제지표'),
         value,
         unit,
-        time: item.TIME ?? '',
+        time: rawTime.length === 6 ? `${rawTime.slice(0, 4)}.${rawTime.slice(4)}` : rawTime,
         cycle: item.CYCLE ?? '',
       }
     })
 
-    return { data: apiResults, isFallback: false }
+    // 소비자물가 상승률을 맨 앞에 배치 (없으면 폴백값 사용)
+    const cpiIndicator = cpiYoY ?? {
+      id: 'economy-cpi-fallback',
+      name: '소비자물가 상승률',
+      value: getFallbackIndicators().find(f => f.name.includes('물가'))?.value ?? '2.0',
+      unit: '%',
+      time: '',
+      cycle: '월',
+    }
+
+    return { data: [cpiIndicator, ...mainResults].slice(0, 6), isFallback: false }
   } catch {
     return { data: getFallbackIndicators(), isFallback: true }
   }

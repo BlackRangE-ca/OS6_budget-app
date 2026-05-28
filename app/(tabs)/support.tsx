@@ -424,6 +424,56 @@ function HousingTab({ notices, youthPolicies, navigation, isFallback, recommend,
   )
 }
 
+// ── 경제 탭 AI 요약 생성 ──────────────────────────────────
+
+function generateEconomySummary(indicators: EconomyIndicator[], savingsRate: number): string {
+  const rate = indicators.find(i => i.name.includes('기준금리'))
+  const cpi = indicators.find(i => i.name.includes('물가') || i.name.includes('CPI'))
+  const unemp = indicators.find(i => i.name.includes('실업'))
+
+  const rateVal = rate ? parseFloat(rate.value.replace(/,/g, '')) : null
+  const cpiVal = cpi ? parseFloat(cpi.value.replace(/,/g, '')) : null
+  const unempVal = unemp ? parseFloat(unemp.value.replace(/,/g, '')) : null
+
+  const parts: string[] = []
+
+  if (rateVal !== null) {
+    if (rateVal >= 3.0) parts.push(`기준금리가 ${rateVal}%로 높은 수준이에요`)
+    else if (rateVal >= 1.5) parts.push(`기준금리가 ${rateVal}%로 보통 수준이에요`)
+    else parts.push(`기준금리가 ${rateVal}%로 낮은 편이에요`)
+  }
+
+  if (cpiVal !== null) {
+    if (cpiVal >= 3.0) parts.push(`소비자물가 상승률이 ${cpiVal}%로 높아 구매력이 낮아지고 있어요`)
+    else if (cpiVal >= 2.0) parts.push(`물가가 ${cpiVal}% 올라 소폭 상승 중이에요`)
+    else parts.push(`물가가 ${cpiVal}%로 안정적이에요`)
+  }
+
+  if (unempVal !== null) {
+    if (unempVal >= 4.0) parts.push(`실업률이 ${unempVal}%로 다소 높아요`)
+    else parts.push(`실업률은 ${unempVal}%로 안정적이에요`)
+  }
+
+  const isHighRate = rateVal !== null && rateVal >= 3.0
+  const isHighCpi = cpiVal !== null && cpiVal >= 3.0
+
+  let advice: string
+  if (isHighRate && isHighCpi) {
+    advice = savingsRate >= 0.2
+      ? '예적금 금리가 높으니 단기 고금리 예금을 활용하고, 물가 헤지를 위해 배당 ETF 비중도 일부 유지하세요.'
+      : '지출을 줄여 저축률부터 높이는 게 우선이에요. 예적금 금리가 높으니 자동이체 적금부터 시작해보세요.'
+  } else if (isHighRate) {
+    advice = '예적금이 유리한 시기예요. 고금리 정기예금이나 채권 ETF로 안정적인 수익을 챙겨보세요.'
+  } else if (isHighCpi) {
+    advice = '물가 상승이 지속되면 현금 가치가 떨어져요. 주식형 ETF나 실물 자산으로 분산하는 게 도움이 돼요.'
+  } else {
+    advice = '경제 지표가 전반적으로 안정적이에요. 예금과 ETF를 균형 있게 배분하는 포트폴리오가 적합해요.'
+  }
+
+  const intro = parts.length > 0 ? parts.join(', ') + '.' : '현재 경제 지표를 분석했어요.'
+  return `${intro} ${advice}`
+}
+
 // ── 경제 탭 ───────────────────────────────────────────────
 
 function EconomyTab({ indicators, rates, indicatorsFallback, savingsRate }: {
@@ -432,12 +482,26 @@ function EconomyTab({ indicators, rates, indicatorsFallback, savingsRate }: {
   indicatorsFallback: boolean
   savingsRate: number
 }) {
+  const summary = indicators.length > 0 ? generateEconomySummary(indicators, savingsRate) : null
+
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-      <View style={styles.aiBanner}>
-        <Ionicons name="sparkles-outline" size={16} color="#7C3AED" />
-        <Text style={styles.aiBannerText}>AI 챗봇 연동 시 맞춤 해석이 제공될 예정이에요</Text>
-      </View>
+      {summary ? (
+        <View style={styles.aiMsgCard}>
+          <View style={styles.aiMsgHeader}>
+            <View style={styles.aiMsgAvatar}>
+              <Ionicons name="sparkles" size={12} color="#7C3AED" />
+            </View>
+            <Text style={styles.aiMsgLabel}>AI 경제 해석</Text>
+          </View>
+          <Text style={styles.aiMsgText}>{summary}</Text>
+        </View>
+      ) : (
+        <View style={styles.aiBanner}>
+          <Ionicons name="sparkles-outline" size={16} color="#7C3AED" />
+          <Text style={styles.aiBannerText}>경제 지표를 불러오는 중이에요</Text>
+        </View>
+      )}
 
       <Text style={styles.sectionLabel}>주요 경제지표</Text>
       <Text style={styles.economyDesc}>한국은행 ECOS 기준</Text>
@@ -530,6 +594,11 @@ const styles = StyleSheet.create({
   recommendBody: { fontSize: 12, color: '#3B82F6', lineHeight: 18 },
   aiBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3E8FF', borderRadius: 12, padding: 12, marginBottom: 14 },
   aiBannerText: { fontSize: 12, color: '#7C3AED', fontWeight: '500', flex: 1 },
+  aiMsgCard: { backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderLeftWidth: 3, borderLeftColor: '#7C3AED' },
+  aiMsgHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  aiMsgAvatar: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#EDE9FE', justifyContent: 'center', alignItems: 'center' },
+  aiMsgLabel: { fontSize: 11, fontWeight: '700', color: '#7C3AED' },
+  aiMsgText: { fontSize: 13, color: '#374151', lineHeight: 20 },
   economyDesc: { fontSize: 12, color: '#9CA3AF', marginBottom: 12 },
   econCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   econLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
@@ -541,7 +610,6 @@ const styles = StyleSheet.create({
   econUnit: { fontSize: 13, fontWeight: '400', color: '#6B7280' },
   interpretRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10 },
   interpretText: { fontSize: 12, color: '#1E40AF', flex: 1, lineHeight: 18 },
-  sectionLabel: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 4 },
   rateGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   rateCard: { width: '47%', backgroundColor: '#fff', borderRadius: 16, padding: 14, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, alignItems: 'flex-start' },
   rateFlag: { fontSize: 28, marginBottom: 6 },
