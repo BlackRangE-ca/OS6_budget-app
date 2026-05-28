@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase'
 import { ConsumptionTypeResult } from '../lib/analyzeConsumption'
 import { analyzeConsumptionTypeAI } from '../lib/analyzeConsumptionAI'
 import { sendMessage, makeWelcomeMessage, ChatMessage } from '../lib/chatApi'
-import { isKbSeeded, seedKnowledgeBase, syncUserSpending } from '../lib/vectorStore'
+import { isKbSeeded, seedKnowledgeBase, syncUserSpending, syncRealtimeData } from '../lib/vectorStore'
 
 type SeedStatus = 'checking' | 'seeding' | 'ready' | 'error'
 
@@ -77,6 +77,8 @@ export default function ChatbotScreen() {
         await seedKnowledgeBase((done, total) => setSeedProgress({ done, total }))
       }
       setSeedStatus('ready')
+      // 실시간 API 데이터는 백그라운드 동기화 (실패해도 챗봇 사용 가능)
+      syncRealtimeData().catch(e => console.warn('[syncRealtimeData]', e))
     } catch (e: any) {
       const msg = e?.message ?? String(e)
       console.error('[KB Seed Error]', msg)
