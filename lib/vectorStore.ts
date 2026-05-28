@@ -29,10 +29,13 @@ export async function isKbSeeded(): Promise<boolean> {
   return (count ?? 0) >= KB_DOCUMENTS.length
 }
 
-// 정적 KB 문서 임베딩 후 저장 (초기 1회만 실행)
+// 정적 KB 문서 임베딩 후 저장 (KB 문서 수 변경 시 기존 삭제 후 재시딩)
 export async function seedKnowledgeBase(
   onProgress?: (done: number, total: number) => void,
 ): Promise<void> {
+  // 기존 KB 문서(user_id IS NULL) 전체 삭제 후 재삽입 — 중복 방지
+  await supabase.from('documents').delete().is('user_id', null)
+
   for (let i = 0; i < KB_DOCUMENTS.length; i++) {
     const doc = KB_DOCUMENTS[i]
     const embedding = await getEmbedding(doc.content, 'passage')
