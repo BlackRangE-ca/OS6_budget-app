@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { fetchDepositProducts, fetchSavingProducts } from '../lib/financeApi'
 import { fetchTopETFs, ETFProduct } from '../lib/krxApi'
+import { fetchKeyStatistics, EconomyIndicator } from '../lib/economyApi'
 
 // ── 타입 ──────────────────────────────────────────────────
 
@@ -217,32 +218,117 @@ export default function InvestmentRecommendationScreen() {
   const [etfs, setEtfs] = useState<ETFProduct[]>([])
   const [etfFallback, setEtfFallback] = useState(false)
   const [totalAsset, setTotalAsset] = useState(0)
-  const [productTab, setProductTab] = useState<'deposit' | 'etf'>('deposit')
+  const [investableAmount, setInvestableAmount] = useState(0)
+  const [monthlyInvestable, setMonthlyInvestable] = useState(0)
+  const [productTab, setProductTab] = useState<'deposit' | 'etf' | 'simulate'>('deposit')
+  const [economyIndicators, setEconomyIndicators] = useState<EconomyIndicator[]>([])
+  const [aiRecommendation, setAiRecommendation] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [riskHistory, setRiskHistory] = useState<{ risk_type: string; created_at: string }[]>([])
+  const [simulateMonthly, setSimulateMonthly] = useState(0)
 
   const riskType = calcRisk(answers)
 
-  async function loadProducts() {
+  async function loadProducts(finalAnswers: number[] = answers) {
     setLoading(true)
     try {
-      const [depositRes, savingRes, etfRes, { data: { user } }] = await Promise.all([
+      const { data: { user } } = await supabase.auth.getUser()
+      const now = new Date()
+      const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
+
+      const [depositRes, savingRes, etfRes, econRes] = await Promise.all([
         fetchDepositProducts().catch(() => []),
         fetchSavingProducts().catch(() => []),
         fetchTopETFs(),
-        supabase.auth.getUser(),
+        fetchKeyStatistics().catch(() => ({ data: [], isFallback: true })),
       ])
       setDeposits([...depositRes, ...savingRes])
       setEtfs(etfRes.data)
       setEtfFallback(etfRes.isFallback)
+      setEconomyIndicators(econRes.data)
 
       if (user) {
-        const { data } = await supabase.from('assets').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(1).single()
-        if (data) {
-          setTotalAsset((data.deposit ?? 0) + (data.savings ?? 0) + (data.stock ?? 0) + (data.insurance ?? 0) + (data.other ?? 0))
+        const [assetRes, budgetRes, txRes, historyRes] = await Promise.all([
+          supabase.from('assets').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(1).single(),
+          supabase.from('budgets').select('salary, amount').eq('user_id', user.id).eq('month', thisMonth).single(),
+          supabase.from('transactions').select('amount, category, type').eq('user_id', user.id)
+            .gte('date', `${thisMonth}-01`).lt('date', `${nextMonth}-01`),
+          supabase.from('risk_profiles').select('risk_type, created_at').eq('user_id', user.id)
+            .order('created_at', { ascending: false }).limit(5),
+        ])
+
+        const assetData = assetRes.data
+        if (assetData) {
+          setTotalAsset((assetData.deposit ?? 0) + (assetData.savings ?? 0) + (assetData.stock ?? 0) + (assetData.insurance ?? 0) + (assetData.other ?? 0))
         }
+
+        // 투자 가능 금액: 총자산 - 비상금(3개월 생활비)
+        const salary = budgetRes.data?.salary ?? 0
+        const monthlyExpense = (txRes.data ?? []).filter((t: any) => t.type !== 'income').reduce((s: number, t: any) => s + t.amount, 0)
+        const emergencyFund = monthlyExpense * 3
+        const assetTotal = assetData ? (assetData.deposit ?? 0) + (assetData.savings ?? 0) + (assetData.stock ?? 0) + (assetData.insurance ?? 0) + (assetData.other ?? 0) : 0
+        const investable = Math.max(0, assetTotal - emergencyFund)
+        setInvestableAmount(investable)
+
+        // 월 투자 가능 금액: 월급 - 지출 - 비상금 적립분
+        const monthlySpend = monthlyExpense
+        const monthlySavable = Math.max(0, salary - monthlySpend)
+        const emergencyMonthly = emergencyFund > 0 && assetTotal < emergencyFund ? Math.min(monthlySavable * 0.5, emergencyFund / 6) : 0
+        setMonthlyInvestable(Math.max(0, Math.round(monthlySavable - emergencyMonthly)))
+        setSimulateMonthly(Math.max(0, Math.round(monthlySavable - emergencyMonthly)))
+
+        setRiskHistory(historyRes.data ?? [])
+
+        // 성향 저장
+        await supabase.from('risk_profiles').insert({
+          user_id: user.id,
+          risk_type: calcRisk(finalAnswers),
+          quiz_score: finalAnswers.reduce((a, b) => a + b, 0),
+          selected_bank: selectedBank,
+        })
+
+        // AI 동적 추천 (백그라운드)
+        generateAiRecommendation(finalAnswers, salary, monthlyExpense, assetData, econRes.data)
       }
     } finally {
       setLoading(false)
     }
+  }
+
+  async function generateAiRecommendation(
+    finalAnswers: number[],
+    salary: number,
+    monthlyExpense: number,
+    assetData: any,
+    indicators: EconomyIndicator[],
+  ) {
+    setAiLoading(true)
+    try {
+      const riskType = calcRisk(finalAnswers)
+      const bank = selectedBank ?? '미선택'
+      const assetTotal = assetData ? (assetData.deposit ?? 0) + (assetData.savings ?? 0) + (assetData.stock ?? 0) : 0
+      const indicatorStr = indicators.map(i => `${i.name} ${i.value}${i.unit}`).join(', ')
+      const systemPrompt =
+        `당신은 투자 전문가입니다. 사용자 데이터를 보고 맞춤 투자 조언을 3~4문장으로 작성하세요.\n` +
+        `규칙: 한글만 사용, 영어/한자 금지. 구체적 금액과 상품명을 포함하세요.`
+      const userMsg =
+        `투자성향: ${riskType} / 주거래은행: ${bank}\n` +
+        `월수입: ${salary.toLocaleString()}원 / 월지출: ${monthlyExpense.toLocaleString()}원\n` +
+        `현재자산: ${assetTotal.toLocaleString()}원\n` +
+        `경제지표: ${indicatorStr || '정보 없음'}\n` +
+        `위 데이터 기반으로 이 사용자에게 맞는 투자 전략을 조언해주세요.`
+
+      const { data, error } = await supabase.functions.invoke('hf-proxy', {
+        body: { action: 'generate', systemPrompt, messages: [{ role: 'user', content: userMsg }] },
+      })
+      if (!error && data?.text) {
+        const clean = (data.text as string).replace(/[一-鿿㐀-䶿豈-﫿]+/g, '').replace(/ {2,}/g, ' ').trim()
+        setAiRecommendation(clean)
+      }
+    } catch { }
+    setAiLoading(false)
   }
 
   function handleBankNext() {
@@ -256,7 +342,7 @@ export default function InvestmentRecommendationScreen() {
     if (quizIdx < QUIZ.length - 1) {
       setQuizIdx(quizIdx + 1)
     } else {
-      loadProducts()
+      loadProducts(next)
       setStep('result')
     }
   }
@@ -365,13 +451,38 @@ export default function InvestmentRecommendationScreen() {
                   </View>
                 </View>
 
-                {/* 자산 현황 */}
-                {totalAsset > 0 && (
-                  <View style={styles.assetRow}>
-                    <Ionicons name="wallet-outline" size={14} color="#6B7280" />
-                    <Text style={styles.assetText}>현재 자산 {totalAsset.toLocaleString()}원 기준 추천</Text>
-                  </View>
-                )}
+                {/* 자산·투자 가능 금액 */}
+                <View style={styles.assetRow}>
+                  <Ionicons name="wallet-outline" size={14} color="#6B7280" />
+                  <Text style={styles.assetText}>
+                    {totalAsset > 0 ? `현재 자산 ${totalAsset.toLocaleString()}원` : '자산 정보 없음'}
+                    {investableAmount > 0 ? ` · 투자 가능 ${investableAmount.toLocaleString()}원` : ''}
+                    {monthlyInvestable > 0 ? ` · 월 투자 여력 ${monthlyInvestable.toLocaleString()}원` : ''}
+                  </Text>
+                </View>
+
+                {/* 경제지표 투자 타이밍 */}
+                {economyIndicators.length > 0 && (() => {
+                  const rate = economyIndicators.find(i => i.name.includes('기준금리'))
+                  const cpi = economyIndicators.find(i => i.name.includes('물가'))
+                  const rateVal = parseFloat(rate?.value ?? '0')
+                  const cpiVal = parseFloat(cpi?.value ?? '0')
+                  const isHighRate = rateVal >= 3.0
+                  const isHighCpi = cpiVal >= 3.0
+                  const msg = isHighRate && isHighCpi
+                    ? `금리 ${rateVal}% · 물가 ${cpiVal}% → 예적금 비중 높이고 인플레 헤지 자산 고려`
+                    : isHighRate
+                    ? `금리 ${rateVal}% 고금리 → 예적금·채권ETF 수익률이 유리한 시기`
+                    : isHighCpi
+                    ? `물가 ${cpiVal}% 상승 → 현금 비중 줄이고 실물·주식 자산 분산 추천`
+                    : `금리 ${rateVal}% · 물가 ${cpiVal}% → 예금과 ETF 균형 배분 적정`
+                  return (
+                    <View style={styles.econTip}>
+                      <Ionicons name="trending-up-outline" size={13} color="#059669" />
+                      <Text style={styles.econTipText}>현재 경제 상황: {msg}</Text>
+                    </View>
+                  )
+                })()}
 
                 {/* 포트폴리오 배분 */}
                 <View style={styles.card}>
@@ -399,18 +510,17 @@ export default function InvestmentRecommendationScreen() {
 
                 {/* 추천 상품 탭 */}
                 <View style={styles.productTabRow}>
-                  <TouchableOpacity
-                    style={[styles.productTab, productTab === 'deposit' && styles.productTabActive]}
-                    onPress={() => setProductTab('deposit')}
-                  >
-                    <Text style={[styles.productTabText, productTab === 'deposit' && styles.productTabTextActive]}>예·적금·정책</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.productTab, productTab === 'etf' && styles.productTabActive]}
-                    onPress={() => setProductTab('etf')}
-                  >
-                    <Text style={[styles.productTabText, productTab === 'etf' && styles.productTabTextActive]}>ETF</Text>
-                  </TouchableOpacity>
+                  {(['deposit', 'etf', 'simulate'] as const).map(tab => (
+                    <TouchableOpacity
+                      key={tab}
+                      style={[styles.productTab, productTab === tab && styles.productTabActive]}
+                      onPress={() => setProductTab(tab)}
+                    >
+                      <Text style={[styles.productTabText, productTab === tab && styles.productTabTextActive]}>
+                        {tab === 'deposit' ? '예·적금' : tab === 'etf' ? 'ETF' : '시뮬레이션'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
 
                 {productTab === 'deposit' && depositProducts.map((p, i) => (
@@ -433,18 +543,98 @@ export default function InvestmentRecommendationScreen() {
                         <Text style={styles.fallbackText}>KRX API 연동 작업 중 · 순자산 상위 ETF 기준값으로 표시</Text>
                       </View>
                     )}
-                    {etfProducts.map((p, i) => (
-                      <View key={i} style={styles.productCard}>
-                        <View style={styles.productHeader}>
-                          <Text style={styles.productName}>{p.name}</Text>
-                          <View style={[styles.productTag, { backgroundColor: p.tagColor + '20' }]}>
-                            <Text style={[styles.productTagText, { color: p.tagColor }]}>{p.tag}</Text>
+                    {etfProducts.map((p, i) => {
+                      const liveEtf = etfs.find(e => e.name.includes(p.name.split(' ')[0]))
+                      return (
+                        <View key={i} style={styles.productCard}>
+                          <View style={styles.productHeader}>
+                            <Text style={styles.productName}>{p.name}</Text>
+                            <View style={[styles.productTag, { backgroundColor: p.tagColor + '20' }]}>
+                              <Text style={[styles.productTagText, { color: p.tagColor }]}>{p.tag}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.productDesc}>{p.desc}</Text>
+                          {liveEtf && (
+                            <View style={styles.etfPriceRow}>
+                              <Text style={styles.etfPrice}>{liveEtf.price.toLocaleString()}원</Text>
+                              <Text style={[styles.etfChange, { color: liveEtf.change >= 0 ? '#059669' : '#EF4444' }]}>
+                                {liveEtf.change >= 0 ? '▲' : '▼'}{Math.abs(liveEtf.change)}%
+                              </Text>
+                              <Text style={styles.etfAum}>순자산 {liveEtf.aum.toLocaleString()}억</Text>
+                            </View>
+                          )}
+                        </View>
+                      )
+                    })}
+                  </>
+                )}
+
+                {productTab === 'simulate' && (() => {
+                  const monthly = simulateMonthly > 0 ? simulateMonthly : 100000
+                  const RATE: Record<RiskType, number> = { 보수형: 0.03, 안정형: 0.05, 중립형: 0.07, 성장형: 0.09, 공격형: 0.11 }
+                  const annualRate = RATE[riskType]
+                  const calc = (years: number) => {
+                    const months = years * 12
+                    const r = annualRate / 12
+                    return Math.round(monthly * ((Math.pow(1 + r, months) - 1) / r))
+                  }
+                  const results = [{ y: 1, label: '1년' }, { y: 3, label: '3년' }, { y: 5, label: '5년' }]
+                  return (
+                    <View>
+                      <View style={styles.simulateHeader}>
+                        <Text style={styles.simulateTitle}>월 {monthly.toLocaleString()}원 적립 시</Text>
+                        <Text style={styles.simulateSub}>{riskType} 기대 수익률 연 {(annualRate * 100).toFixed(0)}% 기준</Text>
+                      </View>
+                      {results.map(r => (
+                        <View key={r.y} style={styles.simulateRow}>
+                          <Text style={styles.simulateYear}>{r.label} 후</Text>
+                          <View style={styles.simulateBar}>
+                            <View style={[styles.simulateBarFill, {
+                              width: `${Math.min(100, (calc(r.y) / calc(5)) * 100)}%` as any,
+                              backgroundColor: info.color,
+                            }]} />
+                          </View>
+                          <Text style={[styles.simulateAmount, { color: info.color }]}>{calc(r.y).toLocaleString()}원</Text>
+                        </View>
+                      ))}
+                      <Text style={styles.simulateDisclaimer}>* 복리 계산 기준 · 실제 수익률은 시장 상황에 따라 다를 수 있어요</Text>
+                    </View>
+                  )
+                })()}
+
+                {/* AI 동적 추천 */}
+                <View style={styles.aiCard}>
+                  <View style={styles.aiCardHeader}>
+                    <Ionicons name="sparkles" size={14} color="#7C3AED" />
+                    <Text style={styles.aiCardTitle}>AI 맞춤 투자 조언</Text>
+                  </View>
+                  {aiLoading
+                    ? <ActivityIndicator size="small" color="#7C3AED" style={{ marginTop: 8 }} />
+                    : aiRecommendation
+                      ? <Text style={styles.aiCardText}>{aiRecommendation}</Text>
+                      : <Text style={styles.aiCardEmpty}>데이터를 분석 중이에요...</Text>
+                  }
+                </View>
+
+                {/* 성향 히스토리 */}
+                {riskHistory.length > 1 && (
+                  <View style={styles.historyCard}>
+                    <Text style={styles.historyTitle}>나의 성향 변화</Text>
+                    {riskHistory.slice(0, 4).map((h, i) => {
+                      const d = new Date(h.created_at)
+                      const label = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
+                      return (
+                        <View key={i} style={styles.historyRow}>
+                          <Text style={styles.historyDate}>{label}</Text>
+                          <View style={[styles.historyBadge, { backgroundColor: (RISK_INFO[h.risk_type as RiskType]?.bg ?? '#F3F4F6') }]}>
+                            <Text style={[styles.historyType, { color: RISK_INFO[h.risk_type as RiskType]?.color ?? '#6B7280' }]}>
+                              {h.risk_type}
+                            </Text>
                           </View>
                         </View>
-                        <Text style={styles.productDesc}>{p.desc}</Text>
-                      </View>
-                    ))}
-                  </>
+                      )
+                    })}
+                  </View>
                 )}
 
                 {/* 다시하기 */}
@@ -524,4 +714,30 @@ const styles = StyleSheet.create({
   fallbackText: { fontSize: 11, color: '#D97706', flex: 1 },
   retryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#7C3AED' },
   retryText: { fontSize: 15, fontWeight: '600', color: '#7C3AED' },
+  econTip: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#ECFDF5', borderRadius: 12, padding: 12, marginBottom: 14 },
+  econTipText: { flex: 1, fontSize: 12, color: '#065F46', lineHeight: 18 },
+  etfPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
+  etfPrice: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  etfChange: { fontSize: 13, fontWeight: '600' },
+  etfAum: { fontSize: 11, color: '#9CA3AF' },
+  simulateHeader: { marginBottom: 14 },
+  simulateTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  simulateSub: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  simulateRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  simulateYear: { width: 42, fontSize: 13, fontWeight: '600', color: '#374151' },
+  simulateBar: { flex: 1, height: 10, backgroundColor: '#F3F4F6', borderRadius: 5, overflow: 'hidden' },
+  simulateBarFill: { height: 10, borderRadius: 5 },
+  simulateAmount: { width: 100, fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  simulateDisclaimer: { fontSize: 10, color: '#9CA3AF', marginTop: 8 },
+  aiCard: { backgroundColor: '#F3E8FF', borderRadius: 16, padding: 16, marginBottom: 14 },
+  aiCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  aiCardTitle: { fontSize: 13, fontWeight: '700', color: '#7C3AED' },
+  aiCardText: { fontSize: 13, color: '#374151', lineHeight: 20 },
+  aiCardEmpty: { fontSize: 13, color: '#9CA3AF' },
+  historyCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14 },
+  historyTitle: { fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 10 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  historyDate: { fontSize: 12, color: '#6B7280' },
+  historyBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  historyType: { fontSize: 12, fontWeight: '700' },
 })

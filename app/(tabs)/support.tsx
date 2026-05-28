@@ -156,12 +156,14 @@ export default function SupportScreen({ navigation }: any) {
   const [policyPrograms, setPolicyPrograms] = useState<any[]>([])
   const [financePrograms, setFinancePrograms] = useState<any[]>([])
   const [housingNotices, setHousingNotices] = useState<HousingNotice[]>([])
+  const [youthHousingPolicies, setYouthHousingPolicies] = useState<any[]>([])
   const [economyIndicators, setEconomyIndicators] = useState<EconomyIndicator[]>([])
   const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>([])
   const [loading, setLoading] = useState(true)
   const [policyFallback, setPolicyFallback] = useState(false)
   const [housingFallback, setHousingFallback] = useState(false)
   const [economyFallback, setEconomyFallback] = useState(false)
+  const [monthlyRent, setMonthlyRent] = useState(0)
   const [userMetrics, setUserMetrics] = useState<UserMetrics>({ salary: 0, monthlySavings: 0, savingsRate: 0, totalSavings: 0 })
 
   useEffect(() => { loadAll() }, [])
@@ -192,6 +194,12 @@ export default function SupportScreen({ navigation }: any) {
           .gte('date', `${thisMonth}-01`).lt('date', `${nextMonth}-01`),
       ])
 
+      // 온통청년 주거지원 항목 분리 (주거 탭 전용)
+      const housingKeywords = ['주거', '전세', '월세', '임대', '대출', '주택']
+      const youthHousing = youthResult.data.filter(p =>
+        housingKeywords.some(k => (p.category ?? '').includes(k) || (p.title ?? '').includes(k))
+      )
+      setYouthHousingPolicies(youthHousing)
       setPolicyPrograms([...youthResult.data, ...bok])
       setPolicyFallback(youthResult.isFallback)
       setFinancePrograms([...deposit, ...saving])
@@ -204,6 +212,9 @@ export default function SupportScreen({ navigation }: any) {
       const salary = budgetData?.salary ?? 0
       const totalSavings = (allSavings ?? []).reduce((s, t) => s + t.amount, 0)
       const monthlySavings = (monthTx ?? []).filter(t => t.category === '저축').reduce((s, t) => s + t.amount, 0)
+      // 주거비(월세) 지출 계산
+      const rent = (monthTx ?? []).filter(t => t.category === '주거').reduce((s: number, t: any) => s + t.amount, 0)
+      setMonthlyRent(rent)
       setUserMetrics({
         salary,
         monthlySavings,
@@ -255,7 +266,15 @@ export default function SupportScreen({ navigation }: any) {
       ) : selectedCategory === 'economy' ? (
         <EconomyTab indicators={economyIndicators} rates={exchangeRates} indicatorsFallback={economyFallback} savingsRate={userMetrics.savingsRate} />
       ) : selectedCategory === 'housing' ? (
-        <HousingTab notices={housingNotices} navigation={navigation} isFallback={housingFallback} recommend={housingRecommend} />
+        <HousingTab
+          notices={housingNotices}
+          youthPolicies={youthHousingPolicies}
+          navigation={navigation}
+          isFallback={housingFallback}
+          recommend={housingRecommend}
+          salary={userMetrics.salary}
+          monthlyRent={monthlyRent}
+        />
       ) : (
         <FlatList
           data={selectedCategory === 'policy' ? policyPrograms : financePrograms}
@@ -290,26 +309,96 @@ export default function SupportScreen({ navigation }: any) {
 
 // ── 주거 탭 ───────────────────────────────────────────────
 
-function HousingTab({ notices, navigation, isFallback, recommend }: {
+const QUICK_LINKS = [
+  { label: 'LH 청약센터', url: 'https://apply.lh.or.kr', icon: '🏢' },
+  { label: '청약홈', url: 'https://www.applyhome.co.kr', icon: '🏠' },
+  { label: '마이홈', url: 'https://www.myhome.go.kr', icon: '🏡' },
+  { label: '버팀목대출', url: 'https://nhuf.molit.go.kr', icon: '💰' },
+]
+
+function HousingTab({ notices, youthPolicies, navigation, isFallback, recommend, salary, monthlyRent }: {
   notices: HousingNotice[]
+  youthPolicies: any[]
   navigation: any
   isFallback: boolean
   recommend: { icon: string; title: string; body: string } | null
+  salary: number
+  monthlyRent: number
 }) {
+  const { Linking } = require('react-native')
+  const rentRatio = salary > 0 ? Math.round(monthlyRent / salary * 100) : 0
+  const rentStatus = rentRatio === 0 ? null
+    : rentRatio <= 20 ? { label: '양호', color: '#059669', bg: '#ECFDF5' }
+    : rentRatio <= 30 ? { label: '주의', color: '#D97706', bg: '#FFFBEB' }
+    : { label: '과부담', color: '#EF4444', bg: '#FEF2F2' }
+
   return (
-    <FlatList
-      data={notices}
-      keyExtractor={item => item.id}
-      contentContainerStyle={styles.list}
-      ListHeaderComponent={
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
+      {recommend && <RecommendCard {...recommend} />}
+
+      {/* 주거비 부담률 */}
+      {rentStatus && (
+        <View style={[styles.rentCard, { backgroundColor: rentStatus.bg }]}>
+          <View style={styles.rentRow}>
+            <Text style={styles.rentLabel}>이번달 주거비 부담률</Text>
+            <View style={[styles.rentBadge, { backgroundColor: rentStatus.color }]}>
+              <Text style={styles.rentBadgeText}>{rentStatus.label}</Text>
+            </View>
+          </View>
+          <Text style={[styles.rentRatio, { color: rentStatus.color }]}>{rentRatio}%</Text>
+          <Text style={styles.rentSub}>
+            월 주거비 {monthlyRent.toLocaleString()}원 / 월급 {salary.toLocaleString()}원
+            {rentRatio > 30 ? ' · 권장 기준(30%) 초과예요' : ' · 권장 기준(30%) 이내예요'}
+          </Text>
+        </View>
+      )}
+
+      {/* 빠른 링크 */}
+      <Text style={styles.sectionLabel}>바로가기</Text>
+      <View style={styles.quickLinkRow}>
+        {QUICK_LINKS.map(link => (
+          <TouchableOpacity
+            key={link.label}
+            style={styles.quickLinkBtn}
+            onPress={() => Linking.openURL(link.url)}
+          >
+            <Text style={styles.quickLinkIcon}>{link.icon}</Text>
+            <Text style={styles.quickLinkText}>{link.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* 온통청년 주거 정책 (실제 API 데이터) */}
+      {youthPolicies.length > 0 && (
         <>
-          {recommend && <RecommendCard {...recommend} />}
-          {isFallback && <FallbackBanner message="API 연동 작업 중 · LH 공공임대주택 기준값으로 표시" />}
+          <Text style={styles.sectionLabel}>청년 주거 지원 정책</Text>
+          <Text style={styles.sectionSub}>온통청년 API 실시간 데이터</Text>
+          {youthPolicies.map((item, i) => (
+            <TouchableOpacity
+              key={item.id ?? i}
+              style={styles.card}
+              onPress={() => navigation.navigate('SupportDetail', { program: item })}
+            >
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{item.category}</Text>
+              </View>
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Text style={styles.cardSummary} numberOfLines={2}>{item.summary}</Text>
+              <Text style={styles.target}>대상: {item.target}</Text>
+            </TouchableOpacity>
+          ))}
         </>
+      )}
+
+      {/* LH 공공임대 */}
+      <Text style={[styles.sectionLabel, { marginTop: 8 }]}>LH 공공임대주택</Text>
+      {isFallback
+        ? <Text style={styles.sectionSub}>API 승인 대기 중 · 주요 프로그램 기준값</Text>
+        : <Text style={styles.sectionSub}>LH 임대공고 실시간 데이터</Text>
       }
-      ListEmptyComponent={<Text style={styles.empty}>주거 지원 정보가 없어요</Text>}
-      renderItem={({ item }) => (
+      {notices.map(item => (
         <TouchableOpacity
+          key={item.id}
           style={styles.card}
           onPress={() => navigation.navigate('SupportDetail', {
             program: {
@@ -330,8 +419,8 @@ function HousingTab({ notices, navigation, isFallback, recommend }: {
             <Text style={styles.metaItem}>📅 {item.deadline}</Text>
           </View>
         </TouchableOpacity>
-      )}
-    />
+      ))}
+    </ScrollView>
   )
 }
 
@@ -420,6 +509,19 @@ const styles = StyleSheet.create({
   target: { fontSize: 12, color: '#9CA3AF' },
   housingMeta: { flexDirection: 'row', gap: 12, marginTop: 4 },
   metaItem: { fontSize: 12, color: '#6B7280' },
+  sectionLabel: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 4 },
+  sectionSub: { fontSize: 11, color: '#9CA3AF', marginBottom: 10 },
+  rentCard: { borderRadius: 16, padding: 16, marginBottom: 14 },
+  rentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  rentLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  rentBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  rentBadgeText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  rentRatio: { fontSize: 32, fontWeight: '800', marginBottom: 4 },
+  rentSub: { fontSize: 12, color: '#6B7280', lineHeight: 18 },
+  quickLinkRow: { flexDirection: 'row', gap: 8, marginBottom: 18, flexWrap: 'wrap' },
+  quickLinkBtn: { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 1, minWidth: 72 },
+  quickLinkIcon: { fontSize: 20, marginBottom: 4 },
+  quickLinkText: { fontSize: 11, fontWeight: '600', color: '#374151' },
   fallbackBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFBEB', borderRadius: 10, padding: 10, marginBottom: 10, borderWidth: 1, borderColor: '#FDE68A' },
   fallbackText: { fontSize: 12, color: '#D97706', fontWeight: '500', flex: 1 },
   recommendCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#EFF6FF', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#BFDBFE' },

@@ -21,6 +21,7 @@ export async function sendMessage(
   userId: string,
   salary?: number,
   assets?: AssetContext,
+  riskType?: string,
 ): Promise<string> {
   const lastUserMsg = messages.findLast(m => m.role === 'user')?.content ?? ''
 
@@ -71,6 +72,8 @@ export async function sendMessage(
     return Math.round(totalAmount * b.diff / 100).toLocaleString()
   })()
 
+  const riskLine = riskType ? `투자성향: ${riskType}\n` : ''
+
   const systemPrompt =
     `당신은 사회초년생 전담 AI 재무 코치입니다.\n` +
     `[언어 규칙 — 가장 중요] 한글과 숫자·%, ., 쉼표만 사용하세요. 한자(政府→정부, 國→국, 特別→특별 등), 중국어, 일본어, 베트남어, 영어, 로마자 모두 절대 사용 금지. 한자가 한 글자라도 나오면 답변 전체 무효입니다.\n\n` +
@@ -79,6 +82,7 @@ export async function sendMessage(
     `${salaryLine}\n` +
     `소비유형: "${type}" — ${description}\n` +
     `재무점수: ${score.total}/100 (${score.grade}등급)\n` +
+    riskLine +
     `카테고리별 지출: ${categoryAmounts}\n` +
     `초과지출 항목: ${overSpentDetail}\n` +
     `가장 많이 쓴 항목: ${topCategory} ${topCategoryAmount.toLocaleString()}원\n` +
@@ -90,7 +94,7 @@ export async function sendMessage(
     `[답변 규칙 — 반드시 준수]\n` +
     `1. "일반적으로", "20대는", "보통 사람들은" 같은 일반론 절대 금지. 위 사용자의 실제 숫자만 근거로 사용하세요.\n` +
     `2. 또래 비교 질문 시: 위 카테고리별 지출과 재무점수를 기준으로 "이 사용자는 ${type} 유형으로 ${score.grade}등급이고, ${overSpentCategories.length > 0 ? overSpentCategories.join('·') + ' 지출이 또래 평균보다 높아요' : '지출 구조는 또래 평균과 비슷해요'}"처럼 실제 데이터로 분석하세요.\n` +
-    `3. 투자 질문 시: 위 자산 현황(예적금·주식 비중)을 그대로 사용해 구체적 비중·상품명을 제안하세요. "일반적 투자 방법" 언급 금지.\n` +
+    `3. 투자 질문 시: ${riskType ? `이 사용자의 투자성향은 ${riskType}이므로 그에 맞는 상품(${riskType === '공격형' || riskType === '성장형' ? '나스닥100·S&P500 ETF 중심' : riskType === '보수형' ? '예적금·채권ETF 중심' : '예금+ETF 균형'})을 구체적으로 제안하세요.` : '위 자산 현황을 그대로 사용해 구체적 비중·상품명을 제안하세요. "일반적 투자 방법" 언급 금지.'}\n` +
     `4. ${foodExcess ? `"식비를 줄이세요" 대신 "식비 ${foodExcess}원을 아끼면 월 적금이 늘어요"처럼` : '카테고리 이름 대신'} 금액 기반으로 구체적으로 말하세요.\n` +
     `5. 관련 청년 정책·상품이 있으면 이름과 핵심 혜택 1줄 추가.\n` +
     `6. 3~5문장 이내, 친근하고 실용적인 말투. 한글·숫자·기호만 사용, 한자·영문자 한 글자도 금지.`

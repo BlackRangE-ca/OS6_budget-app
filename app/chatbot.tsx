@@ -23,6 +23,7 @@ export default function ChatbotScreen() {
   const [analysis, setAnalysis] = useState<ConsumptionTypeResult | null>(null)
   const [salary, setSalary] = useState<number | undefined>(undefined)
   const [userId, setUserId] = useState<string>('')
+  const [riskType, setRiskType] = useState<string | undefined>(undefined)
   const [seedStatus, setSeedStatus] = useState<SeedStatus>('checking')
   const [seedProgress, setSeedProgress] = useState({ done: 0, total: 0 })
 
@@ -37,6 +38,9 @@ export default function ChatbotScreen() {
     const [analysisResult] = await Promise.all([
       loadAnalysis(user.id),
       ensureReady(user.id),
+      supabase.from('risk_profiles').select('risk_type').eq('user_id', user.id)
+        .order('created_at', { ascending: false }).limit(1).single()
+        .then(({ data }) => { if (data?.risk_type) setRiskType(data.risk_type) }),
     ])
 
     if (analysisResult) {
@@ -105,7 +109,7 @@ export default function ChatbotScreen() {
     setIsTyping(true)
 
     try {
-      const reply = await sendMessage(newMessages, analysis, userId, salary)
+      const reply = await sendMessage(newMessages, analysis, userId, salary, undefined, riskType)
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     } catch (e: any) {
       setMessages(prev => [...prev, {
