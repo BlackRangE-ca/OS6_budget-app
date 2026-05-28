@@ -20,15 +20,12 @@ export default function DashboardScreen() {
   const [topCategories, setTopCategories] = useState<{ category: string; ratio: number }[]>([])
   const [consumptionType, setConsumptionType] = useState('')
   const [lastMonthDiff, setLastMonthDiff] = useState<number | null>(null)
-  const [daysUntilPayday, setDaysUntilPayday] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   const now = new Date()
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const thisMonth = now.toISOString().slice(0, 7)
   const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
-  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
+  const lastMonth = lastMonthDate.toISOString().slice(0, 7)
   const monthLabel = `${now.getMonth() + 1}월`
 
   useFocusEffect(
@@ -46,11 +43,11 @@ export default function DashboardScreen() {
         .select('*')
         .eq('user_id', user!.id)
         .gte('date', `${thisMonth}-01`)
-        .lt('date', `${nextMonth}-01`)
+        .lte('date', `${thisMonth}-31`)
         .order('date', { ascending: false }),
       supabase
         .from('budgets')
-        .select('*')
+        .select('amount')
         .eq('user_id', user!.id)
         .eq('month', thisMonth)
         .single(),
@@ -59,7 +56,7 @@ export default function DashboardScreen() {
         .select('amount')
         .eq('user_id', user!.id)
         .gte('date', `${lastMonth}-01`)
-        .lt('date', `${thisMonth}-01`),
+        .lte('date', `${lastMonth}-31`),
     ])
 
     if (txData) {
@@ -67,8 +64,8 @@ export default function DashboardScreen() {
       const total = txData.reduce((sum, t) => sum + t.amount, 0)
       setTotalAmount(total)
 
-      const expenses: Expense[] = txData.map(t => ({ category: t.category, amount: t.amount, type: t.type }))
-      const result = analyzeConsumptionType(expenses, budgetData?.salary, budgetData?.amount)
+      const expenses: Expense[] = txData.map(t => ({ category: t.category, amount: t.amount }))
+      const result = analyzeConsumptionType(expenses)
       setConsumptionType(result.type)
 
       if (total > 0) {
@@ -81,17 +78,8 @@ export default function DashboardScreen() {
         setTopCategories(sorted)
       }
     }
-    setBudget(budgetData?.amount ?? null)
 
-    if (budgetData?.payday) {
-      const today = now.getDate()
-      const payday = budgetData.payday
-      const next = today < payday
-        ? new Date(now.getFullYear(), now.getMonth(), payday)
-        : new Date(now.getFullYear(), now.getMonth() + 1, payday)
-      const days = Math.round((next.getTime() - new Date(now.getFullYear(), now.getMonth(), today).getTime()) / 86400000)
-      setDaysUntilPayday(days)
-    }
+    setBudget(budgetData?.amount ?? null)
 
     if (lastTxData && lastTxData.length > 0) {
       const lastTotal = lastTxData.reduce((sum, t) => sum + t.amount, 0)
@@ -108,7 +96,8 @@ export default function DashboardScreen() {
     Alert.alert('삭제', '이 지출을 삭제할까요?', [
       { text: '취소', style: 'cancel' },
       {
-        text: '삭제', style: 'destructive',
+        text: '삭제',
+        style: 'destructive',
         onPress: async () => {
           const { error } = await supabase.from('transactions').delete().eq('id', id)
           if (error) {
@@ -128,7 +117,6 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>오늘의 자산</Text>
@@ -139,18 +127,8 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Summary Card */}
       <View style={styles.card}>
-        <View style={styles.cardLabelRow}>
-          <Text style={styles.cardLabel}>{monthLabel} 소비 요약</Text>
-          {daysUntilPayday !== null && (
-            <View style={styles.paydayBadge}>
-              <Text style={styles.paydayText}>
-                {daysUntilPayday === 0 ? '🎉 오늘 급여일' : `💸 급여일까지 ${daysUntilPayday}일`}
-              </Text>
-            </View>
-          )}
-        </View>
+        <Text style={styles.cardLabel}>{monthLabel} 소비 요약</Text>
         <Text style={styles.consumptionType}>{consumptionType || '데이터 없음'}</Text>
 
         {lastMonthDiff !== null && (
@@ -180,30 +158,33 @@ export default function DashboardScreen() {
           <View style={styles.pillRow}>
             {topCategories.map(({ category, ratio }) => (
               <View key={category} style={[styles.pill, { backgroundColor: (CATEGORY_COLORS[category] ?? '#2563EB') + '22' }]}>
-                <Text style={[styles.pillText, { color: CATEGORY_COLORS[category] ?? '#2563EB' }]}>{category} {ratio}%</Text>
+                <Text style={[styles.pillText, { color: CATEGORY_COLORS[category] ?? '#2563EB' }]}>
+                  {category} {ratio}%
+                </Text>
               </View>
             ))}
           </View>
         )}
       </View>
 
-      {/* Quick Actions */}
       <View style={styles.actionGrid}>
-        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Salary')}>
+        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Salary' as any)}>
           <View style={styles.actionIcon}>
             <Ionicons name="cash-outline" size={24} color="#2563EB" />
           </View>
           <Text style={styles.actionTitle}>월급관리</Text>
           <Text style={styles.actionSub}>급여일/고정지출</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('자산' as any)}>
+
+        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('자산' as never)}>
           <View style={styles.actionIcon}>
             <Ionicons name="wallet-outline" size={24} color="#2563EB" />
           </View>
           <Text style={styles.actionTitle}>자산 관리</Text>
           <Text style={styles.actionSub}>예산·목표</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('투자' as any)}>
+
+        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('투자' as never)}>
           <View style={styles.actionIcon}>
             <Ionicons name="trending-up-outline" size={24} color="#2563EB" />
           </View>
@@ -212,7 +193,17 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Recent Transactions */}
+      <TouchableOpacity style={styles.goalCard} onPress={() => navigation.navigate('Goal')}>
+        <View style={styles.goalIcon}>
+          <Ionicons name="flag-outline" size={26} color="#2563EB" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.goalTitle}>목표 설정</Text>
+          <Text style={styles.goalSub}>재무 목표와 달성률을 관리해보세요</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
+      </TouchableOpacity>
+
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>최근 지출</Text>
         {loading ? (
@@ -246,6 +237,7 @@ export default function DashboardScreen() {
           ))
         )}
       </View>
+
       <View style={{ height: 32 }} />
     </ScrollView>
   )
@@ -258,10 +250,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, color: '#9CA3AF', marginTop: 2 },
   addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
   card: { backgroundColor: '#fff', borderRadius: 20, marginHorizontal: 16, marginBottom: 12, padding: 20 },
-  cardLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardLabel: { fontSize: 13, color: '#9CA3AF' },
-  paydayBadge: { backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  paydayText: { fontSize: 11, color: '#2563EB', fontWeight: '600' },
+  cardLabel: { fontSize: 13, color: '#9CA3AF', marginBottom: 6 },
   consumptionType: { fontSize: 28, fontWeight: '800', color: '#111827', marginBottom: 8 },
   trendText: { fontSize: 13, color: '#6B7280', marginBottom: 10 },
   progressBg: { height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden', marginBottom: 14 },
@@ -269,11 +258,41 @@ const styles = StyleSheet.create({
   pillRow: { flexDirection: 'row', gap: 8 },
   pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#EFF6FF' },
   pillText: { fontSize: 12, color: '#2563EB', fontWeight: '600' },
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginHorizontal: 16, marginBottom: 12 },
-  actionCard: { width: '48%', backgroundColor: '#fff', borderRadius: 16, padding: 14, alignItems: 'center' },
+  actionGrid: { flexDirection: 'row', gap: 10, marginHorizontal: 16, marginBottom: 12 },
+  actionCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 14, alignItems: 'center' },
   actionIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   actionTitle: { fontSize: 13, fontWeight: '700', color: '#111827', marginBottom: 2 },
   actionSub: { fontSize: 11, color: '#9CA3AF' },
+
+  goalCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 20,
+    padding: 18,
+  },
+  goalIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  goalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  goalSub: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginTop: 4,
+  },
+
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 14 },
   empty: { textAlign: 'center', color: '#9CA3AF', fontSize: 14, paddingVertical: 16 },
   txRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
