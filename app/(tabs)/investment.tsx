@@ -41,16 +41,63 @@ export default function InvestmentScreen() {
         </View>
         <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
       </TouchableOpacity>
+
+      <TouchableOpacity style={styles.menuCard} onPress={() => navigation.navigate('News')}>
+        <View style={[styles.menuIcon, { backgroundColor: '#ECFDF5' }]}>
+          <Ionicons name="newspaper-outline" size={24} color="#059669" />
+        </View>
+        <View style={styles.menuText}>
+          <Text style={styles.menuTitle}>관심사 뉴스</Text>
+          <Text style={styles.menuSub}>ETF · 예금 · 적금 · 청년 재테크 뉴스</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+      </TouchableOpacity>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F4F8', paddingTop: 60 },
-  title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 20, paddingHorizontal: 24 },
-  menuCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 10, borderRadius: 16, padding: 16, gap: 12 },
-  menuIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
-  menuText: { flex: 1 },
-  menuTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
-  menuSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  container: {
+    flex: 1,
+    backgroundColor: '#F2F4F8',
+    paddingTop: 60,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 20,
+    paddingHorizontal: 24,
+  },
+  menuCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  menuIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuText: {
+    flex: 1,
+  },
+  menuTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  menuSub: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
 })
