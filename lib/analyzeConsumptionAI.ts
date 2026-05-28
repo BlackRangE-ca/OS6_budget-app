@@ -52,17 +52,19 @@ export async function analyzeConsumptionTypeAI(
 
     if (error || data?.error || !data?.text) return base
 
-    const jsonMatch = (data.text as string).match(/\{[\s\S]*?\}/)
+    const stripped = (data.text as string).replace(/[一-鿿㐀-䶿豈-﫿]+/g, '')
+    const jsonMatch = stripped.match(/\{[\s\S]*?\}/)
     if (!jsonMatch) return base
 
     const parsed = JSON.parse(jsonMatch[0])
     if (!parsed.type || !parsed.description || !parsed.advice) return base
 
+    const clean = (s: string) => s.replace(/[一-鿿㐀-䶿豈-﫿]+/g, '').replace(/ {2,}/g, ' ').trim()
     return {
       ...base,
-      type: String(parsed.type).slice(0, 20),
-      description: String(parsed.description),
-      advice: String(parsed.advice),
+      type: clean(String(parsed.type)).slice(0, 20),
+      description: clean(String(parsed.description)),
+      advice: clean(String(parsed.advice)),
     }
   } catch {
     return base
