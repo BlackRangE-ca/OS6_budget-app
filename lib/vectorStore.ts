@@ -2,6 +2,9 @@ import { supabase } from './supabase'
 import { getEmbedding } from './hfApi'
 import { KB_DOCUMENTS, KbDoc } from './knowledgeBase'
 import { ConsumptionTypeResult } from './analyzeConsumption'
+import { fetchDepositProducts, fetchSavingProducts } from './financeApi'
+import { fetchKeyStatistics } from './economyApi'
+import { fetchTopETFs } from './krxApi'
 
 export type SearchResult = {
   id: number
@@ -29,10 +32,13 @@ export async function isKbSeeded(): Promise<boolean> {
   return (count ?? 0) >= KB_DOCUMENTS.length
 }
 
-// 정적 KB 문서 임베딩 후 저장 (초기 1회만 실행)
+// 정적 KB 문서 임베딩 후 저장 (KB 문서 수 변경 시 기존 삭제 후 재시딩)
 export async function seedKnowledgeBase(
   onProgress?: (done: number, total: number) => void,
 ): Promise<void> {
+  // 기존 KB 문서(user_id IS NULL) 전체 삭제 후 재삽입 — 중복 방지
+  await supabase.from('documents').delete().is('user_id', null)
+
   for (let i = 0; i < KB_DOCUMENTS.length; i++) {
     const doc = KB_DOCUMENTS[i]
     const embedding = await getEmbedding(doc.content, 'passage')
@@ -82,6 +88,93 @@ export async function syncUserSpending(
     embedding: JSON.stringify(embedding),
     user_id: userId,
   })
+}
+
+// ── 실시간 API 데이터 동기화 ──────────────────────────────
+
+const parseMaxRate = (benefit: string) => {
+  const m = benefit.match(/최고금리 ([\d.]+)%/)
+  return m ? parseFloat(m[1]) : 0
+}
+
+export async function syncRealtimeData(): Promise<void> {
+  await supabase.from('documents').delete().eq('source', 'realtime').is('user_id', null)
+
+  const docs: { content: string }[] = []
+
+  try {
+    const [deposits, savings] = await Promise.all([
+      fetchDepositProducts(),
+      fetchSavingProducts(),
+    ])
+
+    const topDeposits = [...deposits]
+      .sort((a, b) => parseMaxRate(b.benefit) - parseMaxRate(a.benefit))
+      .slice(0, 5)
+    if (topDeposits.length > 0) {
+      docs.push({
+        content:
+          '현재 은행 정기예금 금리 현황 (금감원 실시간):\n' +
+          topDeposits.map(d => `${d.target} "${d.title}" — ${d.benefit}`).join('\n'),
+      })
+    }
+
+    const topSavings = [...savings]
+      .sort((a, b) => parseMaxRate(b.benefit) - parseMaxRate(a.benefit))
+      .slice(0, 5)
+    if (topSavings.length > 0) {
+      docs.push({
+        content:
+          '현재 은행 적금 금리 현황 (금감원 실시간):\n' +
+          topSavings.map(d => `${d.target} "${d.title}" — ${d.benefit}`).join('\n'),
+      })
+    }
+  } catch (e) {
+    console.warn('[syncRealtimeData] 금감원 API 실패:', e)
+  }
+
+  try {
+    const { data: indicators } = await fetchKeyStatistics()
+    if (indicators.length > 0) {
+      docs.push({
+        content:
+          '한국은행 주요 경제지표 (실시간):\n' +
+          indicators.map(i => `${i.name}: ${i.value}${i.unit} (${i.time})`).join('\n'),
+      })
+    }
+  } catch (e) {
+    console.warn('[syncRealtimeData] BOK API 실패:', e)
+  }
+
+  try {
+    const { data: etfs } = await fetchTopETFs()
+    if (etfs.length > 0) {
+      docs.push({
+        content:
+          '주요 ETF 현재가 현황 (KRX 실시간):\n' +
+          etfs
+            .map(
+              e =>
+                `${e.name}: ${e.price.toLocaleString()}원 (등락률 ${e.change >= 0 ? '+' : ''}${e.change}%, 순자산 ${e.aum.toLocaleString()}억원)`,
+            )
+            .join('\n'),
+      })
+    }
+  } catch (e) {
+    console.warn('[syncRealtimeData] KRX API 실패:', e)
+  }
+
+  const updatedAt = new Date().toISOString()
+  for (const doc of docs) {
+    const embedding = await getEmbedding(doc.content, 'passage')
+    await supabase.from('documents').insert({
+      content: doc.content,
+      source: 'realtime',
+      metadata: { updatedAt },
+      embedding: JSON.stringify(embedding),
+      user_id: null,
+    })
+  }
 }
 
 // ── 유사도 검색 ────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity, Modal, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import Svg, { Circle, G, Polyline, Line, Text as SvgText } from 'react-native-svg'
@@ -11,7 +11,9 @@ import {
   calculateFinancialScore,
   FinancialScore,
   BenchmarkComparison,
+  ConsumptionTypeResult,
 } from '../../lib/analyzeConsumption'
+import { analyzeConsumptionTypeAI } from '../../lib/analyzeConsumptionAI'
 
 const SCREEN_W = Dimensions.get('window').width
 const GRAPH_W = SCREEN_W - 80
@@ -332,6 +334,8 @@ export default function AnalysisScreen() {
   const [overSpent, setOverSpent] = useState<string[]>([])
   const [monthTrends, setMonthTrends] = useState<MonthTrend[]>([])
   const [spikedCategories, setSpikedCategories] = useState<{ category: string; diff: number; thisAmt: number; lastAmt: number }[]>([])
+  const [consumptionAnalysis, setConsumptionAnalysis] = useState<ConsumptionTypeResult | null>(null)
+  const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false)
 
   const [assets, setAssets] = useState({ deposit: 0, savings: 0, stock: 0, insurance: 0, other: 0 })
   const [assetModal, setAssetModal] = useState(false)
@@ -420,6 +424,7 @@ export default function AnalysisScreen() {
     setOverSpent([])
     setSpikedCategories([])
     setMonthTrends([])
+    setConsumptionAnalysis(null)
     fetchData(selectedMonth)
   }, [selectedMonth])
 
@@ -529,11 +534,18 @@ export default function AnalysisScreen() {
       }
     }
 
-    // 재무 점수 & 벤치마크
+    // 재무 점수 & 벤치마크 (즉시 표시)
     const result = analyzeConsumptionType(thisData, budgetData?.salary, budgetData?.amount, fixedTx)
     setScore(result.score)
     setBenchmarks(result.benchmarks)
     setOverSpent(result.overSpentCategories)
+    setConsumptionAnalysis(result)
+
+    // AI 소비 유형 분석 (비동기 — 완료되면 카드 업데이트)
+    setAiAnalysisLoading(true)
+    analyzeConsumptionTypeAI(thisData, budgetData?.salary, budgetData?.amount, fixedTx)
+      .then(aiResult => setConsumptionAnalysis(aiResult))
+      .finally(() => setAiAnalysisLoading(false))
   }
 
   const assetTotal = assets.deposit + assets.savings + assets.stock + assets.insurance + assets.other
@@ -691,6 +703,24 @@ export default function AnalysisScreen() {
         </View>
       )}
 
+      {/* AI 소비 유형 분석 카드 */}
+      {consumptionAnalysis && consumptionAnalysis.totalAmount > 0 && (
+        <View style={styles.card}>
+          <View style={styles.aiTypeHeader}>
+            <Text style={styles.cardTitle}>AI 소비 유형 분석</Text>
+            {aiAnalysisLoading && <ActivityIndicator size="small" color="#7C3AED" />}
+          </View>
+          <View style={styles.aiTypeBadge}>
+            <Text style={styles.aiTypeText}>{consumptionAnalysis.type}</Text>
+          </View>
+          <Text style={styles.aiTypeDesc}>{consumptionAnalysis.description}</Text>
+          <View style={styles.aiAdviceBox}>
+            <Ionicons name="bulb-outline" size={14} color="#D97706" />
+            <Text style={styles.aiAdviceText}>{consumptionAnalysis.advice}</Text>
+          </View>
+        </View>
+      )}
+
       {/* AI 챗봇 진입 */}
       <TouchableOpacity style={styles.chatbotBanner} onPress={() => navigation.navigate('Chatbot')}>
         <View style={styles.chatbotLeft}>
@@ -839,6 +869,12 @@ const styles = StyleSheet.create({
   monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827', minWidth: 100, textAlign: 'center' },
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 12 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 16 },
+  aiTypeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  aiTypeBadge: { alignSelf: 'flex-start', backgroundColor: '#F3E8FF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 10 },
+  aiTypeText: { fontSize: 15, fontWeight: '700', color: '#7C3AED' },
+  aiTypeDesc: { fontSize: 13, color: '#374151', lineHeight: 20, marginBottom: 12 },
+  aiAdviceBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#FFFBEB', borderRadius: 12, padding: 12 },
+  aiAdviceText: { flex: 1, fontSize: 13, color: '#92400E', lineHeight: 20 },
   chatbotBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#EDE9FE', borderRadius: 20, marginHorizontal: 16, marginBottom: 12,
