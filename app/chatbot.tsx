@@ -6,7 +6,8 @@ import {
 import { useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
-import { analyzeConsumptionType, ConsumptionTypeResult } from '../lib/analyzeConsumption'
+import { ConsumptionTypeResult } from '../lib/analyzeConsumption'
+import { analyzeConsumptionTypeAI } from '../lib/analyzeConsumptionAI'
 import { sendMessage, makeWelcomeMessage, ChatMessage } from '../lib/chatApi'
 import { isKbSeeded, seedKnowledgeBase, syncUserSpending } from '../lib/vectorStore'
 
@@ -57,7 +58,7 @@ export default function ChatbotScreen() {
 
     const fixedData = (txData ?? []).filter((t: any) => t.type === 'fixed')
 
-    const result = analyzeConsumptionType(
+    const result = await analyzeConsumptionTypeAI(
       txData ?? [], budgetData?.salary ?? null, budgetData?.amount ?? null, fixedData,
     )
     setAnalysis(result)
