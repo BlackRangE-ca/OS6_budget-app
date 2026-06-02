@@ -29,10 +29,10 @@ export async function getEmbedding(text: string, _type: 'query' | 'passage' = 'p
   throw new Error(`알 수 없는 임베딩 형식: ${JSON.stringify(raw).slice(0, 80)}`)
 }
 
-// CJK 한자(U+4E00–U+9FFF, U+3400–U+4DBF, U+F900–U+FAFF) 제거 후 공백 정리
+// 한자·히라가나·가타카나(전각+반각) 제거 후 공백 정리
 function stripHanzi(text: string): string {
   return text
-    .replace(/[一-鿿㐀-䶿豈-﫿]+/g, '')
+    .replace(/[぀-ヿ･-ﾟ一-鿿㐀-䶿豈-﫿]+/g, '')
     .replace(/ {2,}/g, ' ')
     .trim()
 }

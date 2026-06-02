@@ -68,46 +68,49 @@ export async function fetchYouthHousing(): Promise<{ data: HousingNotice[]; isFa
   if (!SERVICE_KEY) return { data: FALLBACK_HOUSING, isFallback: true }
 
   try {
-    const url =
-      `https://apis.data.go.kr/B552854/lhLeaseNoticeInfo1/lhLeaseNoticeInfo1` +
+    // 기간: 오늘 기준 2개월 전 ~ 오늘
+    const now = new Date()
+    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate())
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+
+    // 임대주택(06) + 주거복지(13) 공고 조회
+    const buildUrl = (typeCode: string) =>
+      `https://apis.data.go.kr/B552555/lhLeaseNoticeInfo1/lhLeaseNoticeInfo1` +
       `?serviceKey=${SERVICE_KEY}` +
-      `&type=json` +
-      `&PG_SZ=10` +
-      `&PAGE_NO=1`
+      `&PG_SZ=10&PAGE=1` +
+      `&UPP_AIS_TP_CD=${typeCode}` +
+      `&PAN_ST_DT=${fmt(twoMonthsAgo)}` +
+      `&PAN_ED_DT=${fmt(now)}`
 
-    const res = await fetch(url)
-    const rawText = await res.text()
-    console.log('[LH] status:', res.status, '| preview:', rawText.slice(0, 300))
-    if (rawText.trimStart().startsWith('<')) {
-      const errType = rawText.includes('Forbidden') ? 'Forbidden (API 활용신청 필요)'
-        : rawText.includes('NOT_REGISTERED') ? 'KEY_NOT_REGISTERED'
-        : rawText.includes('ACCESS_DENIED') ? 'ACCESS_DENIED'
-        : 'XML_ERROR'
-      console.error('[LH]', errType, ':', rawText.slice(0, 200))
-      return { data: FALLBACK_HOUSING, isFallback: true }
+    const [res06, res13] = await Promise.all([
+      fetch(buildUrl('06')).then(r => r.text()),
+      fetch(buildUrl('13')).then(r => r.text()),
+    ])
+
+    const parseItems = (rawText: string): any[] => {
+      if (rawText.trimStart().startsWith('<')) return []
+      try {
+        const data = JSON.parse(rawText)
+        // 응답 형식: [{dsSch:[...]}, {resHeader:[...], dsList:[...]}]
+        const dsList = Array.isArray(data) ? data[1]?.dsList : data?.dsList
+        return Array.isArray(dsList) ? dsList : []
+      } catch { return [] }
     }
-    const data = JSON.parse(rawText)
 
-    // 공공데이터포털 표준 응답 형식 + LH 자체 형식 모두 시도
-    const rawItems = data?.response?.body?.items?.item
-      ?? data?.response?.body?.items
-      ?? data?.dsList
-      ?? data?.body?.items
-      ?? []
-    const list = Array.isArray(rawItems) ? rawItems : (rawItems ? [rawItems] : [])
-
+    const list = [...parseItems(res06), ...parseItems(res13)]
     if (list.length === 0) return { data: FALLBACK_HOUSING, isFallback: true }
 
     return {
       data: list.map((item: any, i: number) => ({
-        id: item.PBLANC_NO ?? `lh-${i}`,
-        title: item.HOUSE_NM ?? '임대주택 공고',
-        category: item.HOUSE_SE_NM ?? '공공임대',
-        target: item.RCRIT_PBLANC_DE ? `청약 마감: ${item.RCRIT_PBLANC_DE}` : '청년',
-        summary: `${item.SUBSCRPT_AREA_CODE_NM ?? '전국'} · ${item.HOUSE_SE_NM ?? ''} 공급`,
-        region: item.SUBSCRPT_AREA_CODE_NM ?? '전국',
-        deadline: item.RCRIT_PBLANC_DE ?? '공고 확인',
-        link: 'https://apply.lh.or.kr',
+        id: item.PAN_ID ?? `lh-${i}`,
+        title: item.PAN_NM ?? '임대주택 공고',
+        category: item.AIS_TP_CD_NM ?? item.UPP_AIS_TP_NM ?? '공공임대',
+        target: item.PAN_SS ?? '공고중',
+        summary: `${item.CNP_CD_NM ?? '전국'} · ${item.AIS_TP_CD_NM ?? ''} 공고`,
+        region: item.CNP_CD_NM ?? '전국',
+        deadline: item.CLSG_DT ?? '공고 확인',
+        link: item.DTL_URL ?? 'https://apply.lh.or.kr',
       })),
       isFallback: false,
     }
