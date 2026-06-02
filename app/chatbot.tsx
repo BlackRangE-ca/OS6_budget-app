@@ -41,7 +41,7 @@ export default function ChatbotScreen() {
       loadAnalysis(user.id),
       ensureReady(user.id),
       supabase.from('risk_profiles').select('risk_type').eq('user_id', user.id)
-        .order('created_at', { ascending: false }).limit(1).single()
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
         .then(({ data }) => { if (data?.risk_type) setRiskType(data.risk_type) }),
     ])
 
