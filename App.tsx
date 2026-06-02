@@ -14,6 +14,7 @@ import AddScreen from './app/(tabs)/add'
 import AnalysisScreen from './app/(tabs)/analysis'
 import SettingsScreen from './app/(tabs)/settings'
 import InvestmentScreen from './app/(tabs)/investment'
+import GoalScreen from './app/(tabs)/goal'
 import EditScreen from './app/edit'
 import SalaryScreen from './app/salary'
 import FixedDetailScreen from './app/fixed-detail'
@@ -84,6 +85,7 @@ function AuthStack() {
       <Stack.Screen name="AllTransactions" component={AllTransactionsScreen} />
       <Stack.Screen name="PeerComparison" component={PeerComparisonScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
+      <Stack.Screen name="Goal" component={GoalScreen} />
 
       <Stack.Screen name="SupportDetail" component={SupportDetailScreen} />
       <Stack.Screen name="Chatbot" component={ChatbotScreen} />
