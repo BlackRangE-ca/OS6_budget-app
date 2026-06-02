@@ -283,7 +283,7 @@ export default function InvestmentRecommendationScreen() {
       if (data) {
         setSavedRiskType(data.risk_type as RiskType)
         setSelectedBank(data.selected_bank ?? '기타')
-        loadProducts([], data.risk_type as RiskType)
+        loadProducts([], data.risk_type as RiskType, user)
         setStep('result')
       }
     } finally {
@@ -291,10 +291,10 @@ export default function InvestmentRecommendationScreen() {
     }
   }
 
-  async function loadProducts(finalAnswers: number[] = answers, fromSavedType?: RiskType) {
+  async function loadProducts(finalAnswers: number[] = answers, fromSavedType?: RiskType, cachedUser?: { id: string } | null) {
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = cachedUser ?? (await supabase.auth.getUser()).data.user
       const now = new Date()
       const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
       const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
@@ -314,7 +314,7 @@ export default function InvestmentRecommendationScreen() {
       if (user) {
         const [assetRes, budgetRes, txRes, historyRes] = await Promise.all([
           supabase.from('user_assets').select('*').eq('user_id', user.id).maybeSingle(),
-          supabase.from('budgets').select('salary, amount').eq('user_id', user.id).eq('month', thisMonth).single(),
+          supabase.from('budgets').select('salary, amount').eq('user_id', user.id).eq('month', thisMonth).maybeSingle(),
           supabase.from('transactions').select('amount, category, type').eq('user_id', user.id)
             .gte('date', `${thisMonth}-01`).lt('date', `${nextMonth}-01`),
           supabase.from('risk_profiles').select('risk_type, created_at').eq('user_id', user.id)
@@ -411,8 +411,9 @@ export default function InvestmentRecommendationScreen() {
       }
     } catch {
       setAiRecommendation(buildFallbackAdvice(effectiveRiskType, salary, monthlyExpense, assetData ? (assetData.deposit ?? 0) + (assetData.savings ?? 0) + (assetData.stock ?? 0) : 0, indicators))
+    } finally {
+      setAiLoading(false)
     }
-    setAiLoading(false)
   }
 
   function handleBankNext() {

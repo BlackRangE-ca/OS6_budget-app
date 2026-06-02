@@ -172,6 +172,7 @@ export default function SupportScreen({ navigation }: any) {
     setLoading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
       const now = new Date()
       const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
       const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
@@ -188,9 +189,9 @@ export default function SupportScreen({ navigation }: any) {
         fetchYouthHousing(),
         fetchKeyStatistics().catch(() => ({ data: [], isFallback: true })),
         fetchExchangeRates().catch(() => ({ data: [], isFallback: true })),
-        supabase.from('budgets').select('salary').eq('user_id', user!.id).eq('month', thisMonth).single(),
-        supabase.from('transactions').select('amount').eq('user_id', user!.id).eq('category', '저축'),
-        supabase.from('transactions').select('amount, category').eq('user_id', user!.id)
+        supabase.from('budgets').select('salary').eq('user_id', user.id).eq('month', thisMonth).maybeSingle(),
+        supabase.from('transactions').select('amount').eq('user_id', user.id).eq('category', '저축'),
+        supabase.from('transactions').select('amount, category').eq('user_id', user.id)
           .gte('date', `${thisMonth}-01`).lt('date', `${nextMonth}-01`),
       ])
 
