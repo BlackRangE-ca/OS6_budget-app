@@ -20,6 +20,11 @@ export default function GoalScreen({ navigation }: any) {
   const current = Number(currentAmount.replace(/,/g, '')) || 0
   const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0
   const remaining = Math.max(target - current, 0)
+  const monthlySaving = 300000
+
+const expectedMonths =
+  remaining > 0 ? Math.ceil(remaining / monthlySaving) : 0
+
   const GOAL_STORAGE_KEY = 'user_goal'
 
   const formatNumber = (value: string) => {
@@ -94,7 +99,18 @@ export default function GoalScreen({ navigation }: any) {
           />
           <Text style={styles.unit}>원</Text>
         </View>
+       <View style={styles.row}>
+  <Text style={styles.rowLabel}>남은 금액</Text>
+  <Text style={styles.rowValue}>
+    {remaining.toLocaleString()}원
+  </Text>
+</View>
 
+<Text style={styles.advice}>
+  {progress >= 100
+    ? '목표를 달성했어요! 🎉'
+    : `현재 속도로 약 ${expectedMonths}개월 후 목표 달성이 예상돼요.`}
+</Text>
         <Text style={styles.label}>현재 모은 금액</Text>
         <View style={styles.inputRow}>
           <TextInput
@@ -268,10 +284,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
-  advice: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 21,
-    marginTop: 12,
-  },
+ advice: {
+  marginTop: 16,
+  fontSize: 14,
+  color: '#2563EB',
+  lineHeight: 22,
+  fontWeight: '600',
+},
+  
 })
