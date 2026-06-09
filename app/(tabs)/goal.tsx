@@ -10,20 +10,21 @@ import {
   Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { supabase } from '../../lib/supabase'
 
 export default function GoalScreen({ navigation }: any) {
   const [goalName, setGoalName] = useState('')
   const [goalAmount, setGoalAmount] = useState('')
   const [currentAmount, setCurrentAmount] = useState('')
+  const [monthlySaving, setMonthlySaving] = useState(0)
 
   const target = Number(goalAmount.replace(/,/g, '')) || 0
   const current = Number(currentAmount.replace(/,/g, '')) || 0
   const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0
   const remaining = Math.max(target - current, 0)
-  const monthlySaving = 300000
 
-const expectedMonths =
-  remaining > 0 ? Math.ceil(remaining / monthlySaving) : 0
+  const expectedMonths =
+    remaining > 0 && monthlySaving > 0 ? Math.ceil(remaining / monthlySaving) : 0
 
   const GOAL_STORAGE_KEY = 'user_goal'
 
@@ -32,20 +33,32 @@ const expectedMonths =
     return onlyNumber.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   }
   useEffect(() => {
-  const loadGoal = async () => {
-    const savedGoal = await AsyncStorage.getItem(GOAL_STORAGE_KEY)
+    const load = async () => {
+      const savedGoal = await AsyncStorage.getItem(GOAL_STORAGE_KEY)
+      if (savedGoal) {
+        const parsed = JSON.parse(savedGoal)
+        setGoalName(parsed.goalName)
+        setGoalAmount(parsed.goalAmount)
+        setCurrentAmount(parsed.currentAmount)
+      }
 
-    if (savedGoal) {
-      const parsedGoal = JSON.parse(savedGoal)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-      setGoalName(parsedGoal.goalName)
-      setGoalAmount(parsedGoal.goalAmount)
-      setCurrentAmount(parsedGoal.currentAmount)
+      const now = new Date()
+      const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+      const { data: budgetData } = await supabase
+        .from('budgets').select('salary, amount').eq('user_id', user.id).eq('month', thisMonth).maybeSingle()
+
+      const salary = budgetData?.salary ?? 0
+      const budgetAmount = budgetData?.amount ?? 0
+
+      setMonthlySaving(Math.max(salary - budgetAmount, 0))
     }
-  }
 
-  loadGoal()
-}, [])
+    load()
+  }, [])
 
   const handleSave = async () => {
   if (!goalName || !goalAmount || !currentAmount) {
@@ -108,8 +121,10 @@ const expectedMonths =
 
 <Text style={styles.advice}>
   {progress >= 100
-    ? '목표를 달성했어요! 🎉'
-    : `현재 속도로 약 ${expectedMonths}개월 후 목표 달성이 예상돼요.`}
+    ? '목표를 달성했어요!'
+    : monthlySaving <= 0
+    ? '이번 달 저축 여력 정보가 없어요. 예산을 먼저 설정해주세요.'
+    : `월 저축 여력 ${monthlySaving.toLocaleString()}원 기준, 약 ${expectedMonths}개월 후 목표 달성 예상`}
 </Text>
         <Text style={styles.label}>현재 모은 금액</Text>
         <View style={styles.inputRow}>
