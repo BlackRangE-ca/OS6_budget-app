@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Session } from '@supabase/supabase-js'
 import { Ionicons } from '@expo/vector-icons'
+import { useFonts } from 'expo-font'
 import { supabase } from './lib/supabase'
 
 import LoginScreen from './app/(auth)/login'
@@ -98,6 +99,7 @@ function AuthStack() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ ...Ionicons.font })
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -112,7 +114,7 @@ export default function App() {
     })
   }, [])
 
-  if (loading) return null
+  if (loading || !fontsLoaded) return null
 
   return (
     <NavigationContainer>

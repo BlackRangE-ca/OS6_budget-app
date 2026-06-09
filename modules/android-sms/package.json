@@ -1,0 +1,11 @@
+{
+  "name": "android-sms",
+  "version": "1.0.0",
+  "description": "Android SMS inbox reader for OS6 budget app",
+  "main": "index.ts",
+  "files": [
+    "android",
+    "index.ts",
+    "expo-module.config.json"
+  ]
+}

@@ -21,7 +21,11 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.READ_SMS"
+      ],
+      "package": "com.anonymous.OS6_budgetapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
