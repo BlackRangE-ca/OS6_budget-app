@@ -47,23 +47,14 @@ export default function GoalScreen({ navigation }: any) {
 
       const now = new Date()
       const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-      const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-      const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-      const [{ data: budgetData }, { data: txData }] = await Promise.all([
-        supabase.from('budgets').select('salary').eq('user_id', user.id).eq('month', thisMonth).maybeSingle(),
-        supabase.from('transactions').select('amount, type')
-          .eq('user_id', user.id)
-          .gte('date', `${thisMonth}-01`)
-          .lt('date', `${nextMonth}-01`),
-      ])
+      const { data: budgetData } = await supabase
+        .from('budgets').select('salary, amount').eq('user_id', user.id).eq('month', thisMonth).maybeSingle()
 
       const salary = budgetData?.salary ?? 0
-      const totalExpense = (txData ?? [])
-        .filter((t: any) => t.type !== 'income')
-        .reduce((sum: number, t: any) => sum + (t.amount ?? 0), 0)
+      const budgetAmount = budgetData?.amount ?? 0
 
-      setMonthlySaving(Math.max(salary - totalExpense, 0))
+      setMonthlySaving(Math.max(salary - budgetAmount, 0))
     }
 
     load()
