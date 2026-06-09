@@ -45,8 +45,8 @@ export default function ChatbotFAB() {
     const [{ data: txData }, { data: budgetData }, { data: assetData }] = await Promise.all([
       supabase.from('transactions').select('amount, category, type, date')
         .eq('user_id', user.id).gte('date', `${thisMonth}-01`).lt('date', `${nextMonth}-01`),
-      supabase.from('budgets').select('salary, amount').eq('user_id', user.id).eq('month', thisMonth).single(),
-      supabase.from('assets').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(1).single(),
+      supabase.from('budgets').select('salary, amount').eq('user_id', user.id).eq('month', thisMonth).maybeSingle(),
+      supabase.from('user_assets').select('*').eq('user_id', user.id).order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
     ])
 
     const fixedData = (txData ?? []).filter((t: any) => t.type === 'fixed')
