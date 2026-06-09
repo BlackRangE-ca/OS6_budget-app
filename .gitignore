@@ -34,9 +34,16 @@ yarn-error.*
 .env
 .env*.local
 
+# feature docs (not for repo)
+FEATURE_TECH_DOCS.*
+
 # typescript
 *.tsbuildinfo
 
 # generated native folders
 /ios
 /android
+
+# module build artifacts
+modules/android-sms/android/build/
+modules/android-sms/android/.cxx/

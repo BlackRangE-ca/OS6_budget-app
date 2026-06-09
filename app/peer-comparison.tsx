@@ -48,7 +48,7 @@ export default function PeerComparisonScreen() {
 
     // user_assets 총합이 있으면 우선 사용, 없으면 저축 거래내역 합계로 추정
     const assetTotal = userAssets
-      ? ((userAssets.deposit ?? 0) + (userAssets.stock ?? 0) + (userAssets.insurance ?? 0) + (userAssets.other ?? 0))
+      ? ((userAssets.deposit ?? 0) + (userAssets.savings ?? 0) + (userAssets.stock ?? 0) + (userAssets.insurance ?? 0) + (userAssets.other ?? 0))
       : 0
     const savingsTotal = (allTx ?? []).reduce((s, t) => s + t.amount, 0)
     const baseAmount = assetTotal > 0 ? assetTotal : savingsTotal

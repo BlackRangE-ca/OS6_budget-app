@@ -19,7 +19,8 @@ export default function BudgetScreen() {
   const [savedSalary, setSavedSalary] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const thisMonth = new Date().toISOString().slice(0, 7)
+  const _now = new Date()
+  const thisMonth = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`
 
   useFocusEffect(
     useCallback(() => {

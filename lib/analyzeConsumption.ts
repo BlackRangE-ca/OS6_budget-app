@@ -76,7 +76,7 @@ export function calculateFinancialScore(
   let savingsScore = 5
   if (salary && salary > 0) {
     const savingsAmount = expenses
-      .filter(e => e.category === '저축' || e.type === 'income')
+      .filter(e => e.category === '저축')
       .reduce((s, e) => s + e.amount, 0)
     const savingsRatio = savingsAmount / salary
     if (savingsRatio >= 0.2) savingsScore = 25
@@ -318,7 +318,7 @@ export function analyzeConsumptionType(
   }
 
   const score = calculateFinancialScore(
-    expenses, salary ?? null, budget ?? null, fixedExpenses ?? []
+    spendingExpenses, salary ?? null, budget ?? null, fixedExpenses ?? []
   )
   const benchmarks = getBenchmarkComparison(spendingExpenses, salary ?? null)
 

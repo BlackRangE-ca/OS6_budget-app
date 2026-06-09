@@ -425,7 +425,6 @@ export default function AnalysisScreen() {
     setSpikedCategories([])
     setMonthTrends([])
     setConsumptionAnalysis(null)
-    fetchData(selectedMonth)
   }, [selectedMonth])
 
   async function fetchData(selected: string) {

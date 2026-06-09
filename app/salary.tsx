@@ -138,6 +138,13 @@ export default function SalaryScreen() {
           text: '적용하기',
           onPress: async () => {
             const { data: { user } } = await supabase.auth.getUser()
+            const { data: existing } = await supabase.from('transactions')
+              .select('id').eq('user_id', user!.id).eq('type', 'fixed')
+              .gte('date', `${thisMonth}-01`).lte('date', `${thisMonth}-31`).limit(1)
+            if (existing && existing.length > 0) {
+              Alert.alert('알림', '이번 달 고정비가 이미 적용되어 있어요.')
+              return
+            }
             const rows = templates.map(t => ({
               user_id: user!.id,
               category: t.category,

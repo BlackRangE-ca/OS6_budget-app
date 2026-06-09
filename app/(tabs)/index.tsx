@@ -7,6 +7,13 @@ import { Transaction } from '../../types'
 import { analyzeConsumptionType, Expense } from '../../lib/analyzeConsumption'
 import { CATEGORY_COLORS } from '../../lib/constants'
 
+function localDateStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function localYearMonth(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 const CATEGORY_EMOJI: Record<string, string> = {
   식비: '🍚',
   교통: '🚌',
@@ -36,12 +43,12 @@ export default function DashboardScreen() {
   const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
   const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
 
-  const thisMonth = thisMonthDate.toISOString().slice(0, 7)
+  const thisMonth = localYearMonth(thisMonthDate)
   const monthLabel = `${now.getMonth() + 1}월`
 
-  const thisMonthStart = thisMonthDate.toISOString().slice(0, 10)
-  const nextMonthStart = nextMonthDate.toISOString().slice(0, 10)
-  const lastMonthStart = lastMonthDate.toISOString().slice(0, 10)
+  const thisMonthStart = localDateStr(thisMonthDate)
+  const nextMonthStart = localDateStr(nextMonthDate)
+  const lastMonthStart = localDateStr(lastMonthDate)
 
   useFocusEffect(
     useCallback(() => {
@@ -76,11 +83,11 @@ export default function DashboardScreen() {
           .select('amount, salary')
           .eq('user_id', user.id)
           .eq('month', thisMonth)
-          .single(),
+          .maybeSingle(),
 
         supabase
           .from('transactions')
-          .select('amount')
+          .select('amount, type')
           .eq('user_id', user.id)
           .gte('date', lastMonthStart)
           .lt('date', thisMonthStart),
@@ -92,12 +99,14 @@ export default function DashboardScreen() {
     if (txData) {
       setTransactions(txData)
 
-      const total = txData.reduce((sum, t) => sum + t.amount, 0)
+      const expenseTx = txData.filter((t) => t.type !== 'income')
+      const total = expenseTx.reduce((sum, t) => sum + t.amount, 0)
       setTotalAmount(total)
 
       const expenses: Expense[] = txData.map((t) => ({
         category: t.category,
         amount: t.amount,
+        type: t.type,
       }))
 
       const result = analyzeConsumptionType(expenses, salary, monthlyBudget)
@@ -106,7 +115,7 @@ export default function DashboardScreen() {
       if (total > 0) {
         const catMap: Record<string, number> = {}
 
-        txData.forEach((t) => {
+        expenseTx.forEach((t) => {
           catMap[t.category] = (catMap[t.category] ?? 0) + t.amount
         })
 
@@ -127,8 +136,8 @@ export default function DashboardScreen() {
     setBudget(budgetData?.amount ?? null)
 
     if (lastTxData && lastTxData.length > 0) {
-      const lastTotal = lastTxData.reduce((sum, t) => sum + t.amount, 0)
-      const thisTotal = txData ? txData.reduce((sum, t) => sum + t.amount, 0) : 0
+      const lastTotal = lastTxData.filter((t) => t.type !== 'income').reduce((sum, t) => sum + t.amount, 0)
+      const thisTotal = txData ? txData.filter((t) => t.type !== 'income').reduce((sum, t) => sum + t.amount, 0) : 0
 
       if (lastTotal > 0) {
         setLastMonthDiff(Math.round(((thisTotal - lastTotal) / lastTotal) * 100))
