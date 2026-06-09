@@ -50,7 +50,11 @@ export default function AllTransactionsScreen() {
         text: '삭제', style: 'destructive',
         onPress: async () => {
           const { error } = await supabase.from('transactions').delete().eq('id', id)
-          if (!error) setTransactions(prev => prev.filter(t => t.id !== id))
+          if (!error) setTransactions(prev => {
+            const updated = prev.filter(t => t.id !== id)
+            setTotalSpent(updated.filter(t => t.type !== 'income').reduce((s, t) => s + t.amount, 0))
+            return updated
+          })
         },
       },
     ])

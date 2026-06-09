@@ -38,7 +38,7 @@ export default function FixedDetailScreen() {
       .from('transactions').select('*')
       .eq('user_id', user!.id)
       .gte('date', `${monthStr}-01`)
-      .lte('date', `${monthStr}-31`)
+      .lt('date', `${new Date(year, month, 1).getFullYear()}-${String(new Date(year, month, 1).getMonth() + 1).padStart(2, '0')}-01`)
       .order('date', { ascending: true })
     if (data) {
       setFixedTx(data.filter(t => t.type === 'fixed'))

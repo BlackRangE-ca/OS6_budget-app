@@ -78,7 +78,7 @@ export default function AddScreen() {
       const messages = await getSmsMessages(100)
       const parsed: ParsedSms[] = []
       for (const msg of messages) {
-        const result = parseTransactionText(msg.body)
+        const result = parseTransactionText(msg.body, new Date(msg.date))
         if (result && result.amount > 0) {
           parsed.push({
             ...msg,
