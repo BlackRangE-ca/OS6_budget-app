@@ -21,7 +21,7 @@ function parseNumber(value: string) {
   return value.replace(/,/g, '')
 }
 
-type ParsedSms = SmsMessage & {
+type ParsedSms = Omit<SmsMessage, 'date'> & {
   amount: number
   merchant: string
   category: Category
@@ -35,7 +35,10 @@ export default function AddScreen() {
   const [category, setCategory] = useState<Category>('식비')
   const [type, setType] = useState<TransactionType>('variable')
   const [memo, setMemo] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })
   const [loading, setLoading] = useState(false)
   const [smsModalVisible, setSmsModalVisible] = useState(false)
   const [smsList, setSmsList] = useState<ParsedSms[]>([])
