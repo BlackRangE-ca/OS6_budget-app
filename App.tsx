@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import { View } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Session } from '@supabase/supabase-js'
 import { Ionicons } from '@expo/vector-icons'
+import { useFonts } from 'expo-font'
 import { supabase } from './lib/supabase'
 
 import LoginScreen from './app/(auth)/login'
@@ -13,49 +15,63 @@ import AddScreen from './app/(tabs)/add'
 import AnalysisScreen from './app/(tabs)/analysis'
 import SettingsScreen from './app/(tabs)/settings'
 import InvestmentScreen from './app/(tabs)/investment'
+import GoalScreen from './app/(tabs)/goal'
 import EditScreen from './app/edit'
 import SalaryScreen from './app/salary'
 import FixedDetailScreen from './app/fixed-detail'
 import AllTransactionsScreen from './app/all-transactions'
+
+import PeerComparisonScreen from './app/peer-comparison'
+import SupportScreen from './app/(tabs)/support'
+import SupportDetailScreen from './app/support-detail'
+import ChatbotScreen from './app/chatbot'
+import InvestmentRecommendationScreen from './app/investment-recommendation'
+import ChatbotFAB from './components/ChatbotFAB'
+
+import NewsScreen from './app/(tabs)/news'
+
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
 
 function MainTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopWidth: 0,
-          elevation: 12,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 12,
-          height: 64,
-          paddingBottom: 10,
-        },
-        tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: '#9CA3AF',
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
-        tabBarIcon: ({ focused, color, size }) => {
-          const icons: Record<string, string> = {
-            홈: focused ? 'home' : 'home-outline',
-            자산: focused ? 'wallet' : 'wallet-outline',
-            투자: focused ? 'trending-up' : 'trending-up-outline',
-            설정: focused ? 'menu' : 'menu-outline',
-          }
-          return <Ionicons name={icons[route.name] as any} size={22} color={color} />
-        },
-      })}
-    >
-      <Tab.Screen name="홈" component={DashboardScreen} />
-      <Tab.Screen name="자산" component={AnalysisScreen} />
-      <Tab.Screen name="투자" component={InvestmentScreen} />
-      <Tab.Screen name="설정" component={SettingsScreen} />
-    </Tab.Navigator>
+    <View style={{ flex: 1 }}>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: '#fff',
+            borderTopWidth: 0,
+            elevation: 12,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.06,
+            shadowRadius: 12,
+            height: 64,
+            paddingBottom: 10,
+          },
+          tabBarActiveTintColor: '#2563EB',
+          tabBarInactiveTintColor: '#9CA3AF',
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+          tabBarIcon: ({ focused, color }) => {
+            const icons: Record<string, string> = {
+              홈: focused ? 'home' : 'home-outline',
+              자산: focused ? 'wallet' : 'wallet-outline',
+              투자: focused ? 'trending-up' : 'trending-up-outline',
+              설정: focused ? 'menu' : 'menu-outline',
+            }
+            return <Ionicons name={icons[route.name] as any} size={22} color={color} />
+          },
+        })}
+      >
+        <Tab.Screen name="홈" component={DashboardScreen} />
+        <Tab.Screen name="자산" component={AnalysisScreen} />
+        <Tab.Screen name="투자" component={InvestmentScreen} />
+        <Tab.Screen name="설정" component={SettingsScreen} />
+      </Tab.Navigator>
+      <ChatbotFAB />
+    </View>
   )
 }
 
@@ -68,11 +84,22 @@ function AuthStack() {
       <Stack.Screen name="Salary" component={SalaryScreen} />
       <Stack.Screen name="FixedDetail" component={FixedDetailScreen} />
       <Stack.Screen name="AllTransactions" component={AllTransactionsScreen} />
+      <Stack.Screen name="PeerComparison" component={PeerComparisonScreen} />
+      <Stack.Screen name="Support" component={SupportScreen} />
+      <Stack.Screen name="Goal" component={GoalScreen} />
+
+      <Stack.Screen name="SupportDetail" component={SupportDetailScreen} />
+      <Stack.Screen name="Chatbot" component={ChatbotScreen} />
+      <Stack.Screen name="InvestmentRecommendation" component={InvestmentRecommendationScreen} />
+
+      <Stack.Screen name="News" component={NewsScreen} />
+
     </Stack.Navigator>
   )
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ ...Ionicons.font })
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -87,7 +114,7 @@ export default function App() {
     })
   }, [])
 
-  if (loading) return null
+  if (loading || !fontsLoaded) return null
 
   return (
     <NavigationContainer>
